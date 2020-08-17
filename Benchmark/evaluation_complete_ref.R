@@ -137,22 +137,36 @@ out2=.get_cor(exp_sc_mat, LocalRef, method='kendall', CPU=num.cpu,
 scRef.tag2 <- .get_tag_max(out2)
 
 
-################### simple classifier
-res.simple <- sample.classifier(exp_sc_mat, list.cell.genes)
+df.tags2 <- comfirm.label(exp_sc_mat, list.cell.genes, scRef.tag2)
+df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
+row.names(df.tags2.view) <- df.tags2.view$Row.names
+df.tags2.view$Row.names <- NULL
+names(df.tags2.view) <- c('scRef.tag', 'pvalue', 'qvalue', 'label')
+
+
+# ################### simple classifier
+# res.simple <- sample.classifier(exp_sc_mat, list.cell.genes)
 
 ######################### run scRef
-result.scref <- SCREF(exp_sc_mat, exp_ref_mat, CPU = num.cpu)
-tag <- result.scref$tag2
+result.scref <- SCREF(exp_sc_mat, exp_ref_mat, CPU = num.cpu, print_step=100)
+scRef.tag <- as.data.frame(result.scref$tag2)
+row.names(scRef.tag) <- scRef.tag$cell_id
+scRef.tag$cell_id <- NULL
+names(scRef.tag) <- 'scRef.tag'
+df.tag.view <- merge(scRef.tag, label.filter, by = 'row.names')
+row.names(df.tag.view) <- df.tag.view$Row.names
+df.tag.view$Row.names <- NULL
+names(df.tag.view) <- c('scRef.tag', 'label')
 
 # confirm label
-exp_sc_mat <- exp_sc_mat[gene_over,]
-ori.tag = label.filter[names(exp_sc_mat), 1]
-scRef.tag = tag[,2]
-method.test <- 'wilcox'
-# method.test <- 't.test'
-# method.test <- 'oneway_test'
-meta.tag <- comfirm.label(exp_sc_mat, ori.tag, scRef.tag, method.test)
-meta.tag <- cbind(meta.tag, res.simple)
+# exp_sc_mat <- exp_sc_mat[gene_over,]
+# ori.tag = label.filter[names(exp_sc_mat), 1]
+# scRef.tag = tag[,2]
+# method.test <- 'wilcox'
+# # method.test <- 't.test'
+# # method.test <- 'oneway_test'
+# meta.tag <- comfirm.label(exp_sc_mat, ori.tag, scRef.tag, method.test)
+# meta.tag <- cbind(meta.tag, res.simple)
 
 # evaluation
 # import python package: sklearn.metrics
@@ -160,26 +174,31 @@ use_condaenv("/home/zy/tools/anaconda3")
 # py_config()
 metrics <- import('sklearn.metrics')
 # uniform tags
-tag.test <- meta.tag$tag.test
-tag.test[tag.test == "Astrocyte"] <- "astrocytes_ependymal"
-tag.test[tag.test == "Newly Formed Oligodendrocyte"] <- "oligodendrocytes"
-tag.test[tag.test == "Myelinating oligodendrocyte"] <- "oligodendrocytes"
-tag.test[tag.test == "Endothelial cell"] <- "endothelial-mural" 
-tag.test[tag.test == "Neuron"] <- "neurons" 
-tag.test[tag.test == "Microglia"] <- "microglia" 
-meta.tag$tag.test <- tag.test
+# list of cell names
+df.cell.names <- data.frame(
+    ref.name = ref.names, 
+    sc.name = c("astrocytes_ependymal", "neurons", "Oligodendrocyte precursor cell",
+                "oligodendrocytes", "oligodendrocytes",
+                "microglia", "endothelial-mural"))
 
-scRef.tag[scRef.tag == "Astrocyte"] <- "astrocytes_ependymal"
-scRef.tag[scRef.tag == "Newly Formed Oligodendrocyte"] <- "oligodendrocytes"
-scRef.tag[scRef.tag == "Myelinating oligodendrocyte"] <- "oligodendrocytes"
-scRef.tag[scRef.tag == "Endothelial cell"] <- "endothelial-mural" 
-scRef.tag[scRef.tag == "Neuron"] <- "neurons" 
-scRef.tag[scRef.tag == "Microglia"] <- "microglia" 
-meta.tag$scRef.tag <- scRef.tag
+# evaluation
+# scRef
+scRef.tag.uniform <- df.tag.view$scRef.tag
+for (j in 1:dim(df.cell.names)[1]) {
+    scRef.tag.uniform[scRef.tag.uniform == df.cell.names[j, 'ref.name']] <- 
+        df.cell.names[j, 'sc.name']
+}
+df.tag.view$scRef.tag.uniform <- scRef.tag.uniform
+f1.scRef <- metrics$f1_score(df.tag.view$label, df.tag.view$scRef.tag.uniform, average = 'weighted')
 
-# f1 score
-f1.scref <- metrics$f1_score(ori.tag, scRef.tag, average = 'weighted')
-f1.test <- metrics$f1_score(ori.tag, tag.test, average = 'weighted')
+# scRef2
+scRef2.tag.uniform <- df.tags2.view$scRef.tag
+for (j in 1:dim(df.cell.names)[1]) {
+    scRef2.tag.uniform[scRef2.tag.uniform == df.cell.names[j, 'ref.name']] <- 
+        df.cell.names[j, 'sc.name']
+}
+df.tags2.view$scRef2.tag.uniform <- scRef2.tag.uniform
+f1.scRef2 <- metrics$f1_score(df.tags2.view$label, df.tags2.view$scRef2.tag.uniform, average = 'weighted')
 
 # remove neuron
 meta.tag.remove <- meta.tag[meta.tag$ori.tag != "neurons", ]
