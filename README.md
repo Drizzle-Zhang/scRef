@@ -6,6 +6,8 @@
 
 * A web resource of references <a href='/Reference/'>Visit dbRef</a>
 
+* This is a advanced version of <a href='https://github.com/jumphone/scRef'>scRef</a>
+
 # Table of content
 
 * [Citation](#Citation)
