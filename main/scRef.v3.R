@@ -1156,7 +1156,7 @@ comfirm.label <- function(exp_sc_mat, list.cell.genes, scRef.tag, num.cpu = 20) 
   out.par <- foreach(barcode = dimnames(exp_sc_mat)[[2]], .combine = rbind) %dopar% 
     confirm.classify(exp_sc_mat, list.cell.genes, df.tag, method.test, barcode)
   df.tag <- cbind(df.tag, out.par)
-  df.tag$qvalue <- p.adjust(df.tag$pvalue, method = 'BH')
+  # df.tag$qvalue <- p.adjust(df.tag$pvalue, method = 'BH')
   
   return(df.tag)
   

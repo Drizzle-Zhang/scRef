@@ -21,18 +21,18 @@ sample.classifier <- function(exp_sc_mat, list.cell.genes, method.test = 'wilcox
             names(test.in) <- c('expression.level', 'factor.mark.gene')
             test.in$factor.mark.gene <- as.factor(test.in$factor.mark.gene)
             if (method.test == 'wilcox') {
-                out.test <- wilcox.test(expression.level ~ factor.mark.gene, data = test.in, 
+                out.test <- wilcox.test(expression.level ~ factor.mark.gene, data = test.in,
                                         alternative = 'less')
                 pvalue <- out.test$p.value
             }
             if (method.test == 't.test') {
-                out.test <- t.test(expression.level ~ factor.mark.gene, data = test.in, 
+                out.test <- t.test(expression.level ~ factor.mark.gene, data = test.in,
                                    alternative = 'less', var.equal = T)
                 pvalue <- out.test$p.value
             }
             if (method.test == 'oneway_test') {
                 if (is.null(iter.permutation)) {iter.permutation = 1000}
-                out.test <- oneway_test(formula = expression.level ~ factor.mark.gene, data = test.in, 
+                out.test <- oneway_test(formula = expression.level ~ factor.mark.gene, data = test.in,
                                         alternative = 'less', distribution = approximate(B=iter.permutation))
                 pvalue <- pvalue(out.test)
             }
@@ -40,18 +40,18 @@ sample.classifier <- function(exp_sc_mat, list.cell.genes, method.test = 'wilcox
         }
         min.pval <- min(vector.pval)
         tag.cell <- cells[vector.pval == min.pval]
-        
+
         return(data.frame(tag.test = tag.cell, pvalue = min.pval))
-        
+
     }
-    
+
     out.par <- foreach(barcode = dimnames(exp_sc_mat)[[2]], .combine = rbind) %dopar% confirm.classify(exp_sc_mat, list.cell.genes, method.test, barcode)
     meta.tag <- out.par
     row.names(meta.tag) <- dimnames(exp_sc_mat)[[2]]
     # meta.tag$qvalue <- p.adjust(meta.tag$pvalue, method = 'BH')
-    
+
     return(meta.tag)
-    
+
 }
 
 
@@ -75,7 +75,7 @@ ref.names <- c("Astrocyte", "Neuron", "Oligodendrocyte precursor cell",
                "Microglia", "Endothelial cell")
 names(exp_ref_mat.origin) <- ref.names
 
-out.markers <- find.markers(exp_ref_mat.origin, topN = 100)
+out.markers <- find.markers(exp_ref_mat.origin, type = 'fpkm', topN = 100)
 list.cell.genes <- out.markers[['list.cell.genes']]
 genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
 
@@ -131,17 +131,21 @@ select.df.tags <- df.tags1[df.tags1$qvalue < cutoff.1,]
 select.barcode <- row.names(select.df.tags)
 LocalRef=.generate_ref(exp_sc_mat[,select.barcode], 
                        scRef.tag1[scRef.tag1[, 'cell_id'] %in% select.barcode,], min_cell=10)
+
+out.markers <- find.markers(LocalRef, topN = 100)
+local.cell.genes <- out.markers[['list.cell.genes']]
+
 print('Second-round annotation:')
 out2=.get_cor(exp_sc_mat, LocalRef, method='kendall', CPU=num.cpu, 
               print_step=100, gene_check=F)
 scRef.tag2 <- .get_tag_max(out2)
 
 
-df.tags2 <- comfirm.label(exp_sc_mat, list.cell.genes, scRef.tag2)
+df.tags2 <- comfirm.label(exp_sc_mat, local.cell.genes, scRef.tag2)
 df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
 row.names(df.tags2.view) <- df.tags2.view$Row.names
 df.tags2.view$Row.names <- NULL
-names(df.tags2.view) <- c('scRef.tag', 'pvalue', 'qvalue', 'label')
+names(df.tags2.view) <- c('scRef2.tag', 'pvalue', 'qvalue', 'label')
 
 
 # ################### simple classifier
