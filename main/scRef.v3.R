@@ -110,13 +110,18 @@
     return(log_p_sc_given_ref_list)
   }
   #######################################
-  cl= makeCluster(CPU,outfile='')
-  RUN = parLapply(cl=cl,1:length(exp_sc_mat[1,]), SINGLE)
-  stopCluster(cl)
-  #RUN = mclapply(1:length(colname_sc), SINGLE, mc.cores=CPU)
-  LOG_P_SC_GIVEN_REF = c()
-  for(log_p_sc_given_ref_list in RUN){
-    LOG_P_SC_GIVEN_REF=cbind(LOG_P_SC_GIVEN_REF, log_p_sc_given_ref_list)}
+  # cl= makeCluster(CPU,outfile='')
+  # RUN = parLapply(cl=cl,1:length(exp_sc_mat[1,]), SINGLE)
+  # stopCluster(cl)
+  # #RUN = mclapply(1:length(colname_sc), SINGLE, mc.cores=CPU)
+  # LOG_P_SC_GIVEN_REF = c()
+  # for(log_p_sc_given_ref_list in RUN){
+  #   LOG_P_SC_GIVEN_REF=cbind(LOG_P_SC_GIVEN_REF, log_p_sc_given_ref_list)}
+
+  registerDoParallel(CPU)
+  LOG_P_SC_GIVEN_REF <- 
+    foreach(idx = 1:length(exp_sc_mat[1,]), .combine = cbind) %dopar% SINGLE(idx)
+  
   #######################################
   rownames(LOG_P_SC_GIVEN_REF)=colname_ref
   colnames(LOG_P_SC_GIVEN_REF)=colname_sc
@@ -484,6 +489,7 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
                    min_cell=20, CPU=4, print_step=100,gene_check=FALSE){
   library(foreach)
   library(doParallel)
+  time1 <- Sys.time()
   # find markers of cell types in reference
   print('Find marker genes of cell types in reference:')
   out.markers <- find.markers(exp_ref_mat, type = type_ref, topN = 100)
@@ -614,6 +620,8 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   #####
   gc()
   #####
+  time2 <- Sys.time()
+  time.scRef <- difftime(time2, time1, units = 'secs') 
   output=list()
   output$tag1=tag1
   output$out1=out1
@@ -622,6 +630,7 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   output$out2=out2
   output$pvalue2=df.tags2
   output$final.out <- df.combine
+  output$run.time <- time.scRef
   print('Finish!')
   
   return(output)

@@ -13,7 +13,7 @@ setwd('/home/zy/scRef/try_data')
 # input file
 file.ref <- './scRef/Reference/MouseBrain_Bulk_Zhang2014/Reference_expression.txt'
 # parameters
-num.cpu <- 10
+num.cpu <- 20
 
 # reference file
 file.ref <- file.ref
@@ -119,6 +119,7 @@ sub.evaluation <- function(exp_ref_mat.origin, data.filter, label.filter, path.o
         ori.tag = meta.tag$ori.tag
         scRef.tag = meta.tag$scRef.tag
         # save txt file
+        meta.tag <- meta.tag[order(meta.tag$log10Pval),]
         write.table(meta.tag, 
                     paste0(path.out, 'tags_', dataset,
                            '_scRef_', del.cell.ref, '.txt'), 
@@ -464,7 +465,7 @@ df.cell.names <- data.frame(
 
 # delete specific cell
 cells.ref <- c("", "Astrocyte", "Microglia", "Endothelial cell", "Oligodendrocyte precursor cell")
-cells.unlabeled <- c("", "Astrocyte", "Microglia", "Endothelial Cell", "Oligodendrocyte precursor cell")
+cells.unlabeled <- c("", "Astrocyte", "Microglia", "Endothelial Cell", "Oligodendrocyte Precursor Cell")
 # evaluation
 out <- sub.evaluation(exp_ref_mat.origin, data.filter, label.filter, path.out,
                       df.cell.names, cells.ref, cells.unlabeled, dataset)
