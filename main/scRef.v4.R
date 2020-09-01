@@ -68,7 +68,7 @@
   print('Gene number of exp_ref_mat:')
   print(nrow(exp_ref_mat))
   #################
-  # library(parallel)
+  library(parallel)
   #Step 1. get overlapped genes
   exp_sc_mat=exp_sc_mat[order(rownames(exp_sc_mat)),]
   exp_ref_mat=exp_ref_mat[order(rownames(exp_ref_mat)),]
@@ -118,7 +118,6 @@
   LOG_P_SC_GIVEN_REF = c()
   for(log_p_sc_given_ref_list in RUN){
     LOG_P_SC_GIVEN_REF=cbind(LOG_P_SC_GIVEN_REF, log_p_sc_given_ref_list)}
-
   #######################################
   rownames(LOG_P_SC_GIVEN_REF)=colname_ref
   colnames(LOG_P_SC_GIVEN_REF)=colname_sc
@@ -355,135 +354,9 @@
 }
 
 
-SCREF <- function(exp_sc_mat, exp_ref_mat, method1='kendall', method2='multinomial', min_cell=20, CPU=4, print_step=100,gene_check=FALSE){
-  print_step=print_step
-  print('First-round annotation:')
-  print(method1)
-  if(method1!='multinomial'){
-    out1=.get_cor(exp_sc_mat, exp_ref_mat, method=method1,CPU=CPU, print_step=print_step,gene_check=gene_check)
-  } else {
-    out1=.get_log_p_sc_given_ref(exp_sc_mat, exp_ref_mat, CPU=CPU, print_step=print_step)
-  }
-  
-  ######2019.02.16 start ######
-  out1[which(is.na(out1))] = -1
-  ######2019.02.16 end ######
-  
-  tag1=.get_tag_max(out1)
-  
-  print('Build local reference')
-  LocalRef=.generate_ref(exp_sc_mat, tag1, min_cell=min_cell)
-  #####
-  gc()
-  #####
-  print('Second-round annotation:')
-  print(method2)
-  if(method2!='multinomial'){
-    out2=.get_cor(exp_sc_mat, LocalRef, method=method2,CPU=CPU, print_step=print_step,gene_check=gene_check)
-  } else {
-    out2=.get_log_p_sc_given_ref(exp_sc_mat, LocalRef, CPU=CPU, print_step=print_step)
-  }
-  tag2=.get_tag_max(out2)
-  #####
-  gc()
-  #####
-  output=list()
-  output$tag1=tag1
-  output$out1=out1
-  output$tag2=tag2
-  output$out2=out2
-  print('Finish!')
-  
-  return(output)
-}
-
-
-SCREF2 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', 
-                   method1='kendall', method2='kendall', 
-                   min_cell=20, CPU=4, print_step=100,gene_check=FALSE){
-  # find markers of cell types in reference
-  print('Find marker genes of cell types in reference:')
-  out.markers <- find.markers(exp_ref_mat, type = type_ref, topN = 100)
-  list.cell.genes <- out.markers[['list.cell.genes']]
-  genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
-  # get overlap genes
-  exp_ref_mat <- exp_ref_mat[genes.ref,]
-  exp_sc_mat=exp_sc_mat[order(rownames(exp_sc_mat)),]
-  exp_ref_mat=exp_ref_mat[order(rownames(exp_ref_mat)),]
-  gene_sc=rownames(exp_sc_mat)
-  gene_ref=rownames(exp_ref_mat)
-  gene_over= gene_sc[which(gene_sc %in% gene_ref)]
-  exp_sc_mat=exp_sc_mat[which(gene_sc %in% gene_over),]
-  exp_ref_mat=exp_ref_mat[which(gene_ref %in% gene_over),]
-  print('Number of overlapped genes:')
-  print(nrow(exp_sc_mat))
-  
-  print('First-round annotation:')
-  print(method1)
-  if(method1!='multinomial'){
-    out1=.get_cor(exp_sc_mat, exp_ref_mat, method=method1,CPU=CPU, print_step=print_step,gene_check=gene_check)
-  } else {
-    out1=.get_log_p_sc_given_ref(exp_sc_mat, exp_ref_mat, CPU=CPU, print_step=print_step)
-  }
-  
-  ######2019.02.16 start ######
-  out1[which(is.na(out1))] = -1
-  ######2019.02.16 end ######
-  
-  tag1=.get_tag_max(out1)
-  
-  print('Build local reference')
-  df.tags1 <- comfirm.label(exp_sc_mat, list.cell.genes, tag1)
-  # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
-  cutoff.1 <- 1e-20
-  select.df.tags <- df.tags1[df.tags1$qvalue < cutoff.1,]
-  select.barcode <- row.names(select.df.tags)
-  LocalRef=.generate_ref(exp_sc_mat[,select.barcode], 
-                         tag1[tag1[, 'cell_id'] %in% select.barcode,], min_cell=min_cell)
-  #####
-  gc()
-  #####
-  # find local marker genes
-  print('find local marker genes')
-  out.markers <- find.markers(LocalRef, topN = 100)
-  local.cell.genes <- out.markers[['list.cell.genes']]
-  
-  print('Second-round annotation:')
-  print(method2)
-  if(method2!='multinomial'){
-    out2=.get_cor(exp_sc_mat, LocalRef, method=method2,CPU=CPU, 
-                  print_step=print_step,gene_check=gene_check)
-  } else {
-    out2=.get_log_p_sc_given_ref(exp_sc_mat, LocalRef, CPU=CPU, print_step=print_step)
-  }
-  tag2=.get_tag_max(out2)
-  
-  df.tags2 <- comfirm.label(exp_sc_mat, local.cell.genes, tag2)
-  # df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
-  # row.names(df.tags2.view) <- df.tags2.view$Row.names
-  # df.tags2.view$Row.names <- NULL
-  # names(df.tags2.view) <- c('scRef2.tag', 'pvalue', 'qvalue', 'label')
-  
-  #####
-  gc()
-  #####
-  output=list()
-  output$tag1=tag1
-  output$out1=out1
-  output$pvalue1=df.tags1
-  output$tag2=tag2
-  output$out2=out2
-  output$pvalue2=df.tags2
-  print('Finish!')
-  
-  return(output)
-  
-}
-
-
-SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', 
-                   method1='kendall', method2='kendall', cutoff.local = 1e-20,
-                   min_cell=20, CPU=4, print_step=100,gene_check=FALSE){
+SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', 
+                  method1='kendall', method2='kendall', cutoff.local = 1e-20,
+                  min_cell=20, CPU=4, print_step=100,gene_check=FALSE){
   library(foreach)
   library(doParallel)
   time1 <- Sys.time()
@@ -518,16 +391,23 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   ######2019.02.16 end ######
   
   tag1=.get_tag_max(out1)
+  # df.tag.1 <- as.data.frame(tag1)
+  # row.names(df.tag.1) <- df.tag.1$cell_id
+  # df.tag.1$cell_id <- NULL
+  # names(df.tag.1) <- 'scRef.tag'
+  # df.view.1 <- merge(df.tag.1, label.filter, by = 'row.names')
   
   print('Build local reference')
-  df.tags1 <- comfirm.label(exp_sc_mat[,1:200], list.cell.genes, tag1)
+  df.tags1 <- comfirm.label(exp_sc_mat, list.cell.genes, tag1, CPU=CPU)
   gc()
+  df.tags1 <- df.tags1[names(exp_sc_mat),]
   # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
   # cutoff.1 <- 1e-20
   select.df.tags <- df.tags1[df.tags1$pvalue < cutoff.local,]
   select.barcode <- row.names(select.df.tags)
   LocalRef=.generate_ref(exp_sc_mat[,select.barcode], 
                          tag1[tag1[, 'cell_id'] %in% select.barcode,], min_cell=min_cell)
+
   #####
   gc()
   #####
@@ -549,6 +429,7 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   
   df.tags2 <- comfirm.label(exp_sc_mat, local.cell.genes, tag2)
   gc()
+  df.tags2 <- df.tags2[names(exp_sc_mat),]
   # df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
   # row.names(df.tags2.view) <- df.tags2.view$Row.names
   # df.tags2.view$Row.names <- NULL
@@ -610,8 +491,15 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
     }
     return(df.final)
   }
+  registerDoParallel(num.cpu)
   df.combine <- foreach(barcode = row.names(df.tags), .combine = rbind) %dopar% 
     sub.combine(barcode)
+  stopImplicitCluster()
+  
+  combine.out <- merge(df.combine, pvalue, by = 'row.names')
+  row.names(combine.out) <- combine.out$Row.names
+  combine.out$Row.names <- NULL
+  # df.view <- merge(label.filter, combine.out, by = 'row.names')
   
   # df.view <- merge(df.combine, df.tags, by = 'row.names')
   # row.names(df.view) <- df.view$Row.names
@@ -620,10 +508,9 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   
   #####
   gc()
-  stopImplicitCluster()
   #####
   time2 <- Sys.time()
-  time.scRef <- difftime(time2, time1, units = 'secs') 
+  time.scRef <- difftime(time2, time1, units = 'secs')
   output=list()
   output$tag1=tag1
   output$out1=out1
@@ -632,6 +519,7 @@ SCREF3 <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count',
   output$out2=out2
   output$pvalue2=df.tags2
   output$final.out <- df.combine
+  output$combine.out <- combine.out
   output$run.time <- time.scRef
   print('Finish!')
   
@@ -1082,7 +970,95 @@ find.markers <- function(exp_ref_mat, type = 'count', topN = NULL, cutoff.fc = N
 }
 
 
-comfirm.label <- function(exp_sc_mat, list.cell.genes, scRef.tag) {
+find.markers.RUV <- function(exp_ref_mat, type = 'count', topN = NULL, cutoff.fc = NULL, cutoff.pval = NULL) {
+  ###### regard MCA as reference of DEG
+  file.MCA <- '/home/disk/scRef/MouseAtlas_SingleCell_Han2018/combinedMCA/MCA_combined_mouse_uniform.txt'
+  df.MCA <- read.table(file.MCA, header=T, row.names=1, sep='\t', check.name=F)
+  library(DESeq2)
+  coldata.MCA <- DataFrame(row.names = names(df.MCA))
+  obj.DESeq.MCA <- DESeqDataSetFromMatrix(countData = df.MCA, colData = coldata.MCA, 
+                                          design = ~ 1)
+  fpm.MCA <- fpm(obj.DESeq.MCA, robust = T)
+  
+  # transform count to fpm
+  if (type == 'count') {
+    exp_ref_mat <- as.data.frame(exp_ref_mat)
+    coldata.ref <- DataFrame(row.names = names(exp_ref_mat))
+    obj.DESeq.ref <- DESeqDataSetFromMatrix(countData = exp_ref_mat, colData = coldata.ref, 
+                                            design = ~ 1)
+    exp_ref_mat <- fpm(obj.DESeq.ref, robust = T)
+    exp_ref_mat <- as.data.frame(exp_ref_mat)
+  }
+  
+  # overlap genes
+  fpm.MCA=fpm.MCA[order(rownames(fpm.MCA)),]
+  exp_ref_mat=exp_ref_mat[order(rownames(exp_ref_mat)),]
+  gene_MCA=rownames(fpm.MCA)
+  gene_ref=rownames(exp_ref_mat)
+  gene_over= gene_MCA[which(gene_MCA %in% gene_ref)]
+  fpm.MCA=fpm.MCA[which(gene_MCA %in% gene_over),]
+  exp_ref_mat=exp_ref_mat[which(gene_ref %in% gene_over),]
+  print('Number of overlapped genes:')
+  print(nrow(exp_ref_mat))
+  
+  cell.MCA <- dimnames(fpm.MCA)[[2]]
+  cell.ref <- names(exp_ref_mat)
+  cell.overlap <- intersect(cell.MCA, cell.ref)
+  # combat
+  library(sva)
+  mtx.in <- cbind(fpm.MCA, exp_ref_mat)
+  names(mtx.in) <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
+  batch <- c(rep(1, dim(fpm.MCA)[2]), rep(2, dim(exp_ref_mat)[2]))
+  cov.cell <- c(cell.MCA, names(exp_ref_mat))
+  mod <- model.matrix(~ as.factor(cov.cell))
+  mtx.combat <- ComBat(mtx.in, batch, mod, par.prior = T, ref.batch = 1)
+  mtx.combat <- scale(mtx.combat)
+  
+  cells <- names(exp_ref_mat)
+  
+  # cutoff.fc <- 1.5
+  # cutoff.pval <- 0.05
+  # topN <- 100
+  # cutoff.fc <- NULL
+  # cutoff.pval <- NULL
+  list.cell.genes <- list()
+  for (cell in cells) {
+    vec.cell <- mtx.combat[, paste0('Ref.', cell)]
+    exp.top10 <- quantile(vec.cell, 0.9)
+    genes.high <- gene_over[vec.cell > exp.top10]
+    mtx.combat.use <- mtx.combat[, !(dimnames(mtx.combat)[[2]] %in% c(paste0('MCA.', cell), paste0('Ref.', cell)))]
+    mtx.limma <- cbind(mtx.combat.use, vec.cell)
+    mtx.limma.in <- mtx.limma[genes.high,]
+    bool.cell <- as.factor(c(rep('1', dim(mtx.combat.use)[2]), '2'))
+    res.limma <- .getDEgeneF(mtx.limma.in, bool.cell)
+    if (is.null(topN) & (!is.null(cutoff.fc) & !is.null(cutoff.pval))) {
+      df.diff <- res.limma[
+        ((res.limma$logFC > cutoff.fc) & (res.limma$adj.P.Val < cutoff.pval)),]
+      genes.diff <- row.names(df.diff)
+    }
+    if (!is.null(topN) & (is.null(cutoff.fc) & is.null(cutoff.pval))) {
+      genes.diff <- row.names(res.limma)[1:topN]
+    }
+    if (!is.null(topN) & (!is.null(cutoff.fc) & !is.null(cutoff.pval))) {
+      print('Error: provide too many parameters')
+      return()
+    }
+    if (is.null(topN) & (is.null(cutoff.fc) & is.null(cutoff.pval))) {
+      print('Error: provide too few parameters')
+      return()
+    }
+    list.cell.genes[[cell]] <- genes.diff
+  }
+  
+  out <- list()
+  out[['list.cell.genes']] <- list.cell.genes
+  out[['exp_ref_mat']] <- exp_ref_mat
+  return(out)
+  
+}
+
+
+comfirm.label <- function(exp_sc_mat, list.cell.genes, scRef.tag, CPU=10) {
   # confirm label
   df.tag <- as.data.frame(scRef.tag)
   row.names(df.tag) <- df.tag$cell_id
@@ -1107,27 +1083,20 @@ comfirm.label <- function(exp_sc_mat, list.cell.genes, scRef.tag) {
     
   }
   
-  cl= makeCluster(10,outfile='')
-  # RUN <- parLapply(cl = cl, dimnames(exp_sc_mat)[[2]], SINGLE, exp_sc_mat, df.tag, list.cell.genes)
-  system.time(RUN <- parLapply(cl = cl, dimnames(exp_sc_mat)[[2]], SINGLE, 
-                   exp_sc_mat = exp_sc_mat, df.tag = df.tag, list.cell.genes = list.cell.genes))
+  cl= makeCluster(CPU, outfile='')
+  RUN <- parLapply(cl = cl, dimnames(exp_sc_mat)[[2]], SINGLE, 
+                   exp_sc_mat = exp_sc_mat, df.tag = df.tag, list.cell.genes = list.cell.genes)
   stopCluster(cl)
-  #RUN = mclapply(1:length(colname_sc), SINGLE, mc.cores=CPU)
   df.pval = data.frame()
   for(single.pval in RUN){
     df.pval=rbind(df.pval, single.pval)}
 
-  # library(foreach)
-  # library(doParallel)
-  # registerDoParallel(10)
-  # system.time(out.par <- foreach(barcode = dimnames(exp_sc_mat)[[2]], .combine = rbind) %dopar%
-  #               SINGLE(barcode, exp_sc_mat, df.tag, list.cell.genes))
-  df.tag <- merge(df.tag, df.pval, by = 'row.names')
+  meta.tag <- merge(df.tag, df.pval, by = 'row.names')
   row.names(meta.tag) <- meta.tag$Row.names
   meta.tag$Row.names <- NULL
   
   gc()
   
-  return(df.tag)
+  return(meta.tag)
   
 }
