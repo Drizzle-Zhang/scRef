@@ -4,7 +4,7 @@ library(foreach)
 library(doParallel)
 # library(metap)
 
-source('/home/zy/my_git/scRef/main/scRef.v5.R')
+source('/home/zy/my_git/scRef/main/scRef.v6.R')
 # import python package: sklearn.metrics
 use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 # py_config()
@@ -15,7 +15,7 @@ setwd('/home/zy/scRef/try_data')
 # input file
 file.ref <- './scRef/Reference/MouseBrain_Bulk_Zhang2014/Reference_expression.txt'
 # parameters
-num.cpu <- 8
+num.cpu <- 10
 
 # reference file
 file.ref <- file.ref
@@ -97,42 +97,6 @@ OUT <- readRDS('./Habib/Habib.Rdata')
 data.filter <- OUT$data.filter
 label.filter <- OUT$label.filter
 
-# cluster
-library(Seurat)
-# data preparing
-seurat.unlabeled <- CreateSeuratObject(counts = data.filter)
-seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize", 
-                                  scale.factor = 10000)
-seurat.unlabeled <- FindVariableFeatures(seurat.unlabeled, selection.method = "vst", nfeatures = 2000)
-# VariableFeaturePlot(seurat.unlabeled)
-# seurat.unlabeled[["percent.mt"]] <- PercentageFeatureSet(seurat.unlabeled, pattern = "^mt-")
-# seurat.unlabeled <- ScaleData(seurat.unlabeled, vars.to.regress = "percent.mt")
-# seurat.unlabeled <- ScaleData(seurat.unlabeled, features = all.genes)
-seurat.unlabeled <- ScaleData(seurat.unlabeled)
-
-# add label
-use.cells <- dimnames(seurat.unlabeled@assays$RNA@counts)[[2]]
-seurat.unlabeled@meta.data$original.label <- label.filter[use.cells,]
-# seurat.unlabeled@meta.data$scRef.tag <- scRef.tag
-# seurat.unlabeled@meta.data$new.tag <- new.tag
-
-# PCA
-seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75, verbose = F)
-
-# cluster
-seurat.unlabeled <- FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75, nn.eps = 0.5)
-seurat.unlabeled <- FindClusters(seurat.unlabeled, resolution = 3, n.start = 20)
-
-# UMAP
-seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:20, n.neighbors = 30)
-# figure1: ture label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'original.label')
-# figure2: cluster label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
-# figure3: scRef plus label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'new.tag')
-
-
 # list of cell names
 all.cell <- unique(label.filter[,1])
 sc.name <- c("Astrocyte", "Neurons", "OPC",
@@ -142,11 +106,23 @@ unknow.cell <- setdiff(all.cell, sc.name)
 df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name)
 
 exp_ref_mat <- exp_ref_mat.origin
-exp_sc_mat = data.filter
+
+library(Seurat)
+# data preparing
+seurat.unlabeled <- CreateSeuratObject(counts = data.filter)
+seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize",
+                                  scale.factor = 10000)
+seurat.unlabeled <- FindVariableFeatures(seurat.unlabeled, selection.method = "vst", nfeatures = 8000)
+# use.genes <- VariableFeatures(seurat.unlabeled)
+# VariableFeaturePlot(seurat.unlabeled)
+# exp_sc_mat <- data.filter[use.genes,]
+exp_sc_mat <- data.filter[,1:5000]
 
 # run scRef
-source('/home/zy/my_git/scRef/main/scRef.v5.R')
-result.scref <- SCREF(exp_sc_mat, exp_ref_mat, type_ref = 'fpkm', min_cell=10, CPU = num.cpu)
+source('/home/zy/my_git/scRef/main/scRef.v6.R')
+result.scref <- SCREF(exp_sc_mat, exp_ref_mat, type_ref = 'fpkm', 
+                      cluster.speed = T, cluster.cell = 5,
+                      min_cell=30, CPU = num.cpu)
 meta.tag <- merge(result.scref$final.out, label.filter, by = 'row.names')
 row.names(meta.tag) <- meta.tag$Row.names
 meta.tag$Row.names <- NULL
@@ -157,6 +133,30 @@ meta.tag <- meta.tag[order(meta.tag$log10Pval),]
 write.table(meta.tag, 
             paste0(path.out, 'tags_', dataset, '_scRef', '.txt'),
             sep = '\t', quote = F)
+
+# cutoff by cluster
+# meta.tag <- read.table(paste0(path.out, 'tags_', dataset, '_scRef', '.txt'), sep = '\t',
+#                        row.names = 1, header = T)
+df.cluster <- as.data.frame(df.cluster)
+df.tag.cluster <- merge(meta.tag, df.cluster, by = 'row.names')
+cluster.ids <- unique(df.cluster$cluster.id)
+meta.cluster <- data.frame(stringsAsFactors = F)
+for (cluster.id in cluster.ids) {
+    sub.tag.cluster <- df.tag.cluster[df.tag.cluster$cluster.id == cluster.id, ]
+    mean.log10Pval <- mean(sub.tag.cluster$log10Pval)
+    # sd.log10Pval <- sd(sub.tag.cluster$log10Pval)
+    table.tag <- table(sub.tag.cluster$scRef.tag)
+    table.tag <- table.tag[order(table.tag, decreasing = T)]
+    main.cell <- names(table.tag[1])
+    percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
+    min.log10Pval <- min(sub.tag.cluster[sub.tag.cluster$scRef.tag == main.cell, 'log10Pval'])
+    meta.cluster <- rbind(meta.cluster, 
+                          data.frame(cluster.id = cluster.id,
+                                     mean.log10Pval = mean.log10Pval,
+                                     min.log10Pval = min.log10Pval,
+                                     main.cell = main.cell,
+                                     percent.main.cell = percent.main.cell))
+}
 
 # evaluation
 ori.tag = meta.tag$ori.tag
@@ -175,9 +175,9 @@ one.eval <- function(cutoff, meta.tag) {
     # use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
     # metrics <- import('sklearn.metrics')
     true.tag <- meta.tag$ori.tag
-    true.tag[true.tag %in% unknow.cell] <- 'unknown'
+    true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
     our.tag <- meta.tag$scRef.tag
-    our.tag[meta.tag$log10Pval <= cutoff] <- 'unknown'
+    our.tag[meta.tag$log10Pval <= cutoff] <- 'Unassigned'
     df.sub[1, 'cutoff'] <- cutoff
     df.sub[1, 'weighted.f1'] <-
         metrics$f1_score(true.tag, our.tag, average = 'weighted')
@@ -217,3 +217,40 @@ new.tag <- meta.tag$scRef.tag
 new.tag[meta.tag$log10Pval <= best.cutoff] <- 'unknown'
 meta.tag$new.tag <- new.tag
 print(best.cutoff)
+
+# cluster
+library(Seurat)
+# data preparing
+seurat.unlabeled <- CreateSeuratObject(counts = data.filter)
+seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize", 
+                                  scale.factor = 10000)
+seurat.unlabeled <- FindVariableFeatures(seurat.unlabeled, selection.method = "vst", nfeatures = 2000)
+# VariableFeatures(seurat.unlabeled)
+# VariableFeaturePlot(seurat.unlabeled)
+# seurat.unlabeled[["percent.mt"]] <- PercentageFeatureSet(seurat.unlabeled, pattern = "^mt-")
+# seurat.unlabeled <- ScaleData(seurat.unlabeled, vars.to.regress = "percent.mt")
+# seurat.unlabeled <- ScaleData(seurat.unlabeled, features = all.genes)
+seurat.unlabeled <- ScaleData(seurat.unlabeled)
+
+# add label
+use.cells <- dimnames(seurat.unlabeled@assays$RNA@counts)[[2]]
+seurat.unlabeled@meta.data$original.label <- label.filter[use.cells,]
+# seurat.unlabeled@meta.data$scRef.tag <- scRef.tag
+# seurat.unlabeled@meta.data$new.tag <- new.tag
+
+# PCA
+seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75, verbose = F)
+
+# cluster
+seurat.unlabeled <- FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75, nn.eps = 0.5)
+seurat.unlabeled <- FindClusters(seurat.unlabeled, resolution = 3, n.start = 20)
+
+# UMAP
+seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:20, n.neighbors = 30)
+# figure1: ture label
+DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'original.label')
+# figure2: cluster label
+DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
+# figure3: scRef plus label
+DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'new.tag')
+
