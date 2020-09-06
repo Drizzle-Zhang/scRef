@@ -310,7 +310,7 @@
     seurat.out.group <- 
         NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
                       scale.factor = 1e6, verbose = F)
-    if (num.use.gene) {
+    if (!is.null(num.use.gene)) {
         seurat.out.group <- FindVariableFeatures(
             seurat.out.group, selection.method = "vst",
             nfeatures = num.use.gene, verbose = F)
@@ -588,8 +588,8 @@
     
     # overlap genes
     out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
-    fpm.MCA <- out.overlap$exp_sc_mat
-    exp_ref_mat <- out.overlap$exp_ref_mat
+    fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
+    exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
     # print('Number of overlapped genes:')
     # print(nrow(exp_ref_mat))
     
@@ -763,6 +763,7 @@
     sc.genes <- row.names(exp_sc_mat)
     df.cluster <- as.matrix(df.cluster)
     cluster.ids <- as.character(unique(df.cluster))
+    cluster.cell <- cluster.cell
     num.cpu <- floor(length(cluster.ids) / 10)
     cl <- makeCluster(num.cpu, outfile = '')
     clusterExport(cl, '.generate_ref')
