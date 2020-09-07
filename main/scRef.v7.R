@@ -930,6 +930,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     # cluster analysis
     print('Start clustering :')
     df.cluster <- .cluster_sc(exp_sc_mat)
+    print('Clustering completed!')
     
     # speed calculation
     if (cluster.speed) {
@@ -1132,16 +1133,17 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     #####
     time2 <- Sys.time()
     time.scRef <- difftime(time2, time1, units = 'secs')
-    output = list()
-    output$tag1 = tag1
-    output$out1 = out1
-    output$pvalue1 = df.tags1
-    output$tag2 = tag2
-    output$out2 = out2
-    output$pvalue2 = df.tags2
+    output <- list()
+    output$tag1 <- tag1
+    output$out1 <- out1
+    output$pvalue1 <- df.tags1
+    output$tag2 <- tag2
+    output$out2 <- out2
+    output$pvalue2 <- df.tags2
     output$final.out <- df.combine
     output$combine.out <- df.tags
     output$run.time <- time.scRef
+    output$info.cluster <- meta.cluster
     if (cluster.speed) {
         output$dict.cluster <- df.dict
     }
@@ -1149,4 +1151,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     print('Finish!')
     
     return(output)
+}
+
+
+supervised <- function(variables) {
+  
 }

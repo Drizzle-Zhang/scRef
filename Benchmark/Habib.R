@@ -102,7 +102,7 @@ sc.name <- c("Astrocyte", "Neurons", "OPC",
              "Oligodend", "Oligodend",
              "microglia", "EndothelialCells")
 unknow.cell <- setdiff(all.cell, sc.name)
-df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name)
+df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:length(sc.name))
 
 exp_ref_mat <- exp_ref_mat.origin
 
@@ -113,7 +113,7 @@ exp_ref_mat <- exp_ref_mat.origin
 #                                   scale.factor = 10000)
 # seurat.unlabeled <- FindVariableFeatures(seurat.unlabeled, selection.method = "vst", nfeatures = 8000)
 # use.genes <- VariableFeatures(seurat.unlabeled)
-# VariableFeaturePlot(seurat.unlabeled)
+# # VariableFeaturePlot(seurat.unlabeled)
 # exp_sc_mat <- data.filter[use.genes,]
 exp_sc_mat <- data.filter
 # df.Habib <- data.filter
@@ -122,7 +122,7 @@ exp_sc_mat <- data.filter
 source('/home/zy/my_git/scRef/main/scRef.v7.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, exp_ref_mat, type_ref = 'fpkm', 
-                      cluster.speed = T, cluster.cell = 5,
+                      cluster.speed = T, cluster.cell = 10,
                       min_cell = 30, CPU = num.cpu)
 meta.tag <- merge(result.scref$final.out, label.filter, by = 'row.names')
 row.names(meta.tag) <- meta.tag$Row.names
@@ -144,6 +144,16 @@ for (j in 1:dim(df.cell.names)[1]) {
         df.cell.names[j, 'sc.name']
 }
 meta.tag$scRef.tag <- scRef.tag
+
+# default cutoff
+true.tag <- meta.tag$ori.tag
+true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
+our.tag <- meta.tag$scRef.tag
+metrics$f1_score(true.tag, our.tag, average = 'weighted')
+metrics$f1_score(true.tag, our.tag, average = 'macro')
+metrics$accuracy_score(true.tag, our.tag)
+
+
 vec.cutoff <- 1:90
 
 one.eval <- function(cutoff, meta.tag) {
@@ -212,11 +222,12 @@ seurat.unlabeled <- ScaleData(seurat.unlabeled)
 # add label
 use.cells <- dimnames(seurat.unlabeled@assays$RNA@counts)[[2]]
 seurat.unlabeled@meta.data$original.label <- label.filter[use.cells,]
-# seurat.unlabeled@meta.data$scRef.tag <- scRef.tag
+mtx.tag <- as.matrix(meta.tag)
+seurat.unlabeled@meta.data$scRef.tag <- mtx.tag[use.cells, 'scRef.tag'] 
 # seurat.unlabeled@meta.data$new.tag <- new.tag
 
 # PCA
-seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75, verbose = F)
+seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75)
 
 # cluster
 seurat.unlabeled <- FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75, nn.eps = 0.5)
@@ -229,5 +240,29 @@ DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'original.la
 # figure2: cluster label
 DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
 # figure3: scRef plus label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'new.tag')
+DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'scRef.tag')
 
+# Supervised UMAP
+# use python in R
+library(reticulate)
+use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
+# py_config()
+# import python package: umap
+py_module_available('umap')
+umap <- import('umap')
+class.umap <- umap$UMAP()
+
+mat.pca <- seurat.unlabeled@reductions$pca@cell.embeddings
+label.seurat <- seurat.unlabeled@meta.data$scRef.tag
+for (j in 1:dim(df.cell.names)[1]) {
+    label.seurat[label.seurat == df.cell.names[j, 'sc.name']] <- df.cell.names[j, 'idx']
+}
+label.seurat[label.seurat == 'Unassigned'] <- '-1'
+label.seurat <- as.numeric(label.seurat)
+embedding <- class.umap$fit_transform(X = mat.pca, y = label.seurat)
+dimnames(embedding)[[1]] <- dimnames(mat.pca)[[1]]
+
+umap.label <- CreateDimReducObject(embeddings = embedding, key = 'UMAP_')
+seurat.unlabeled@reductions$umap.label <- umap.label
+DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'scRef.tag')
+DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'original.label')
