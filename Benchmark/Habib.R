@@ -1,4 +1,3 @@
-library(stringr)
 library(reticulate)
 library(foreach)
 library(doParallel)
@@ -30,6 +29,7 @@ if (!file.exists(path.out)) {
 # function of data preparation
 prepare.data <- function(file.data.unlabeled, file.label.unlabeled, 
                          del.label = c('miss')) {
+    library(stringr)
     data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
     data.unlabeled <- floor(data.unlabeled)
     names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
@@ -105,6 +105,12 @@ unknow.cell <- setdiff(all.cell, sc.name)
 df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:length(sc.name))
 
 exp_ref_mat <- exp_ref_mat.origin
+
+# match MCA names with ref names
+ref_MCA_names <- data.frame(MCA.name = c("Astrocyte", "Neuron", "Oligodendrocyte precursor cell",
+                                          "Oligodendrocyte", "Myelinating oligodendrocyte",
+                                          "Microglia", "Endothelial cell"),
+                            ref.name = ref.names)
 
 # library(Seurat)
 # # data preparing
@@ -266,3 +272,7 @@ umap.label <- CreateDimReducObject(embeddings = embedding, key = 'UMAP_')
 seurat.unlabeled@reductions$umap.label <- umap.label
 DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'scRef.tag')
 DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'original.label')
+
+mtx.tag <- as.matrix(meta.tag)
+label.in <- mtx.tag[use.cells, 'scRef.tag']
+plot.label <- supervised.UMAP(data.filter, label.in)
