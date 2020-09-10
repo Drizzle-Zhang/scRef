@@ -453,6 +453,126 @@
 }
 
 
+.find_markers_auto1 <- function(exp_ref_mat, type_ref = 'count', 
+                               out.group = 'MCA', topN = NULL) {
+  library(parallel, verbose = F)
+  library(Seurat, verbose = F)
+  # check parameters
+  if (!is.null(topN)) {
+    topN <- topN
+  } else {
+    stop('Error in finding markers: provide incorrect parameters')
+  }
+  
+  # transform count to fpm
+  if (type_ref == 'count') {
+    seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
+    seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
+                                scale.factor = 1e6, verbose = F)
+    exp_ref_mat <- as.matrix(seurat.Ref@assays$RNA@data)
+  }
+  if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
+    exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
+  }
+  
+  ###### regard a outgroup (e.g. MCA/HCA) as reference of DEG
+  seurat.MCA <- .imoprt_outgroup(out.group, num.use.gene = 10000)
+  # select high variance genes to match MCA cells
+  use.genes <- VariableFeatures(seurat.MCA)
+  fpm.MCA.high.variance <- as.matrix(seurat.MCA@assays$RNA@data[use.genes,])
+  
+  # overlap genes
+  out.overlap <- .get_overlap_genes(fpm.MCA.high.variance, exp_ref_mat)
+  fpm.MCA.high.variance <- as.matrix(out.overlap$exp_sc_mat)
+  exp_ref_mat.high.variance <- as.matrix(out.overlap$exp_ref_mat)
+  # print('Number of overlapped genes:')
+  # print(nrow(exp_ref_mat))
+  
+  # generate cov
+  out <- .get_cor(fpm.MCA.high.variance, exp_ref_mat.high.variance, 
+                  method = 'pearson', CPU = 4)
+  ref.names <- dimnames(out)[[1]]
+  MCA.names <- dimnames(out)[[2]]
+  new.ref.names <- c()
+  for (i in 1:dim(out)[1]) {
+    sub.max <- max(out[i,])
+    # print(paste0('Reference cells: ', ref.names[i]))
+    sel.names <-
+      MCA.names[order(out[i,], decreasing = T)[1]]
+    print(paste0(
+      'Reference cells: ', ref.names[i],
+      ' | ',
+      'Matched cells: ', sel.names
+    ))
+    print(paste0('Pearson coefficient: ', round(sub.max, digits = 4)))
+    new.ref.names <- c(new.ref.names, sel.names)
+  }
+  
+  fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
+  out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
+  fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
+  exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
+  
+  cell.MCA <- dimnames(fpm.MCA)[[2]]
+  cell.ref <- dimnames(exp_ref_mat)[[2]]
+  # cell.overlap <- intersect(cell.MCA, cell.ref)
+  # combat
+  library(sva, verbose = F)
+  mtx.in <- cbind(fpm.MCA, exp_ref_mat)
+  dimnames(mtx.in)[[2]] <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
+  batch <- c(rep(1, dim(fpm.MCA)[2]), rep(2, dim(exp_ref_mat)[2]))
+  cov.cell <- c(cell.MCA, new.ref.names)
+  mod <- model.matrix(~ as.factor(cov.cell))
+  mtx.combat <- ComBat(mtx.in, batch, mod, par.prior = T, ref.batch = 1)
+  mtx.combat <- scale(mtx.combat)
+  
+  # cutoff.fc <- 1.5
+  # cutoff.pval <- 0.05
+  # topN <- 100
+  # cutoff.fc <- NULL
+  # cutoff.pval <- NULL
+  list.cell.genes <- list()
+  for (i in 1:length(cell.ref)) {
+    cell <- cell.ref[i]
+    vec.cell <- mtx.combat[, paste0('Ref.', cell)]
+    vec.cell.high <- vec.cell[vec.cell > quantile(vec.cell, 0.85)]
+    vec.ref <- exp_ref_mat[, cell]
+    vec.ref.high <- vec.ref[vec.ref > quantile(vec.ref, 0.85)]
+    # high expression genes
+    genes.high <- intersect(names(vec.cell.high), names(vec.ref.high))
+    # diff in reference
+    cells <- c(setdiff(cell.ref, cell), cell)
+    bool.cell <- cells
+    bool.cell[bool.cell != cell] <- '1'
+    bool.cell[bool.cell == cell] <- '2'
+    res.limma.ref <- .getDEgeneF(exp_ref_mat[, cells], bool.cell)
+    bool.cell <- c()
+    genes.ref <-
+      row.names(res.limma.ref[((res.limma.ref$P.Value < 0.1) &
+                                 (res.limma.ref$logFC > 0.5)),])
+    use.genes <- intersect(genes.high, genes.ref)
+    
+    mtx.combat.use <- mtx.combat[, cov.cell != new.ref.names[i]]
+    mtx.limma <- cbind(mtx.combat.use, vec.cell)
+    bool.cell <- as.factor(c(rep('1', dim(mtx.combat.use)[2]), '2'))
+    res.limma <- .getDEgeneF(mtx.limma, bool.cell)
+    res.limma.high <- res.limma[use.genes,]
+    res.limma.high <- res.limma.high[res.limma.high$logFC > 0,]
+    res.limma.high <- res.limma.high[order(res.limma.high$P.Value),]
+    
+    genes.diff <- row.names(res.limma.high)[1:topN]
+    list.cell.genes[[cell]] <- genes.diff
+    
+  }
+  
+  out <- list()
+  out[['list.cell.genes']] <- list.cell.genes
+  out[['exp_ref_mat']] <- exp_ref_mat
+  return(out)
+  
+}
+
+
 .find_markers_auto <- function(exp_ref_mat, type_ref = 'count', 
                                out.group = 'MCA', topN = NULL) {
     library(parallel, verbose = F)
@@ -476,55 +596,34 @@
     }
     
     ###### regard a outgroup (e.g. MCA/HCA) as reference of DEG
-    seurat.MCA <- .imoprt_outgroup(out.group, num.use.gene = 15000)
-    # select high variance genes to match MCA cells
-    use.genes <- VariableFeatures(seurat.MCA)
-    fpm.MCA.high.variance <- as.matrix(seurat.MCA@assays$RNA@data[use.genes,])
+    seurat.MCA <- .imoprt_outgroup(out.group)
+    fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
     
     # overlap genes
-    out.overlap <- .get_overlap_genes(fpm.MCA.high.variance, exp_ref_mat)
-    fpm.MCA.high.variance <- as.matrix(out.overlap$exp_sc_mat)
-    exp_ref_mat.high.variance <- as.matrix(out.overlap$exp_ref_mat)
-    # print('Number of overlapped genes:')
-    # print(nrow(exp_ref_mat))
-    
-    # generate cov
-    out <- .get_cor(fpm.MCA.high.variance, exp_ref_mat.high.variance, 
-                    method = 'pearson', CPU = 4)
-    ref.names <- dimnames(out)[[1]]
-    MCA.names <- dimnames(out)[[2]]
-    new.ref.names <- c()
-    for (i in 1:dim(out)[1]) {
-        sub.max <- max(out[i,])
-        # print(paste0('Reference cells: ', ref.names[i]))
-        sel.names <-
-            MCA.names[order(out[i,], decreasing = T)[1]]
-        print(paste0(
-            'Reference cells: ', ref.names[i],
-            ' | ',
-            'Matched cells: ', sel.names
-        ))
-        print(paste0('Pearson coefficient: ', round(sub.max, digits = 4)))
-        new.ref.names <- c(new.ref.names, sel.names)
-    }
-    
     fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
     out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
     fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
     exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
+    # print('Number of overlapped genes:')
+    # print(nrow(exp_ref_mat))
     
     cell.MCA <- dimnames(fpm.MCA)[[2]]
     cell.ref <- dimnames(exp_ref_mat)[[2]]
     # cell.overlap <- intersect(cell.MCA, cell.ref)
     # combat
-    library(sva, verbose = F)
+    # library(sva, verbose = F)
     mtx.in <- cbind(fpm.MCA, exp_ref_mat)
-    dimnames(mtx.in)[[2]] <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
-    batch <- c(rep(1, dim(fpm.MCA)[2]), rep(2, dim(exp_ref_mat)[2]))
-    cov.cell <- c(cell.MCA, new.ref.names)
-    mod <- model.matrix(~ as.factor(cov.cell))
-    mtx.combat <- ComBat(mtx.in, batch, mod, par.prior = T, ref.batch = 1)
-    mtx.combat <- scale(mtx.combat)
+    names.mix <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
+    dimnames(mtx.in)[[2]] <- names.mix
+    # batch <- c(rep(1, dim(fpm.MCA)[2]), rep(2, dim(exp_ref_mat)[2]))
+    # cov.cell <- c(cell.MCA, new.ref.names)
+    # mod <- model.matrix(~ as.factor(cov.cell))
+    # mtx.combat <- ComBat(mtx.in, batch, mod, par.prior = T, ref.batch = 1)
+    # mtx.combat <- scale(mtx.combat)
+    seurat.mix <- CreateSeuratObject(mtx.in)
+    seurat.mix@assays$RNA@data <- mtx.in
+    seurat.mix <- ScaleData(seurat.mix, verbose = F)
+    mtx.combat <- seurat.mix@assays$RNA@scale.data
     
     # cutoff.fc <- 1.5
     # cutoff.pval <- 0.05
@@ -552,7 +651,7 @@
                                          (res.limma.ref$logFC > 0.5)),])
         use.genes <- intersect(genes.high, genes.ref)
         
-        mtx.combat.use <- mtx.combat[, cov.cell != new.ref.names[i]]
+        mtx.combat.use <- mtx.combat[, names.mix != paste0('Ref.', cell)]
         mtx.limma <- cbind(mtx.combat.use, vec.cell)
         bool.cell <- as.factor(c(rep('1', dim(mtx.combat.use)[2]), '2'))
         res.limma <- .getDEgeneF(mtx.limma, bool.cell)
