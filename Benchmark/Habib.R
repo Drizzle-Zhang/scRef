@@ -160,7 +160,7 @@ metrics$f1_score(true.tag, our.tag, average = 'macro')
 metrics$accuracy_score(true.tag, our.tag)
 
 use.cells <- dimnames(data.filter)[[2]]
-mtx.tag <- as.matrix(meta.tag)
+mtx.tag <- as.matrix(result.scref$final.out)
 scRef.tags <- mtx.tag[use.cells, 'scRef.tag'] 
 plot.Habib <- supervised.UMAP(data.filter, scRef.tags)
 

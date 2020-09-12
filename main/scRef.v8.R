@@ -545,7 +545,7 @@
 }
 
 
-.cluster_sc <- function(exp_sc_mat) {
+.cluster_sc <- function(exp_sc_mat, cluster.num.pc = 75, cluster.resolution = 3) {
     # cluster
     library(Seurat, verbose = F)
     # data preparing
@@ -560,14 +560,14 @@
     seurat.unlabeled <- ScaleData(seurat.unlabeled, verbose = F)
     
     # PCA
-    seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75, verbose = F)
+    seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = cluster.num.pc, verbose = F)
     
     # cluster
     seurat.unlabeled <-
-        FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75,
+        FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:cluster.num.pc,
                       nn.eps = 0.5, verbose = F)
     seurat.unlabeled <-
-        FindClusters(seurat.unlabeled, resolution = 3, n.start = 20,
+        FindClusters(seurat.unlabeled, cluster.resolution = 3, n.start = 20,
                      n.iter = 100, verbose = F)
     
     out.cluster <-
@@ -743,11 +743,14 @@
 }
 
 
-SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA', 
-                  topN = 100, cluster.speed = F, cluster.cell = 5,
+SCREF <- function(exp_sc_mat, exp_ref_mat, 
+                  identify_unassigned = T,
+                  type_ref = 'count', out.group = 'MCA', topN = 100, 
+                  cluster.num.pc = 75, cluster.resolution = 3, 
+                  cluster.speed = F, cluster.cell = 5,
                   method1 = 'kendall', method2 = 'multinomial', 
                   cutoff.1 = 'default', cutoff.2 = 'default',
-                  min_cell = 20, CPU = 4, print_step = 100) {
+                  min_cell = 20, CPU = 4) {
     library(parallel, verbose = F)
     # check parameters
     if (!type_ref %in% c('count', 'fpkm', 'tpm', 'rpkm', 'bulk')) {
@@ -764,34 +767,41 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     print('Number of overlapped genes:')
     print(nrow(exp_sc_mat))
     
-    # find markers of cell types in reference
-    print('Find marker genes of cell types in reference:')
-    out.markers <-
-        .find_markers_auto(exp_ref_mat, type_ref = type_ref, topN = topN)
-    list.cell.genes <- out.markers[['list.cell.genes']]
-    genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
-    
-    # overlap genes
-    gene.overlap <- intersect(gene_over, genes.ref)
-    exp_sc_mat <- exp_sc_mat[gene.overlap, ]
-    exp_ref_mat <- exp_ref_mat[gene.overlap, ]
-    print('Number of overlapped genes:')
-    print(nrow(exp_sc_mat))
-    
-    # cluster analysis
-    print('Start clustering :')
-    df.cluster <- .cluster_sc(exp_sc_mat)
-    print('Clustering completed!')
-    
-    # speed calculation
-    if (cluster.speed) {
-        print('Speed calculation by clustering:')
-        out.merge <-
-            .cluster_increase_speed(exp_sc_mat, df.cluster, 
-                                    cluster.cell = cluster.cell, CPU = CPU)
-        df.dict <- out.merge$df.dict
-        df.exp.merge <- out.merge$df.exp.merge
-        min_cell <- ceiling(min_cell / cluster.cell)
+    if (identify_unassigned) {
+        # find markers of cell types in reference
+        print('Find marker genes of cell types in reference:')
+        out.markers <-
+            .find_markers_auto(exp_ref_mat, type_ref = type_ref, topN = topN)
+        list.cell.genes <- out.markers[['list.cell.genes']]
+        genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
+        
+        # overlap genes
+        gene.overlap <- intersect(gene_over, genes.ref)
+        exp_sc_mat <- exp_sc_mat[gene.overlap, ]
+        exp_ref_mat <- exp_ref_mat[gene.overlap, ]
+        print('Number of overlapped genes:')
+        print(nrow(exp_sc_mat))
+        
+        # cluster analysis
+        print('Start clustering :')
+        df.cluster <-
+            .cluster_sc(exp_sc_mat,
+                        cluster.num.pc = cluster.num.pc,
+                        cluster.resolution = cluster.resolution)
+        print('Clustering completed!')
+        
+        # speed calculation
+        if (cluster.speed) {
+            print('Speed calculation by clustering:')
+            out.merge <-
+                .cluster_increase_speed(exp_sc_mat, df.cluster, 
+                                        cluster.cell = cluster.cell, CPU = CPU)
+            df.dict <- out.merge$df.dict
+            df.exp.merge <- out.merge$df.exp.merge
+            min_cell <- ceiling(min_cell / cluster.cell)
+        } else {
+            df.exp.merge <- exp_sc_mat
+        }
     } else {
         df.exp.merge <- exp_sc_mat
     }
@@ -803,12 +813,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     print('First-round annotation:')
     print(method1)
     if (method1 != 'multinomial') {
-        out1 <- .get_cor(df.exp.merge, exp_ref_mat, method = method1,
-                         CPU = CPU, print_step = print_step, 
-                         gene_overlap = FALSE)
+        out1 <- .get_cor(df.exp.merge, exp_ref_mat, method = method1, CPU = CPU)
     } else {
-        out1 <- .get_log_p_sc_given_ref(df.exp.merge, exp_ref_mat,
-                                        CPU = CPU, print_step = print_step)
+        out1 <- .get_log_p_sc_given_ref(df.exp.merge, exp_ref_mat, CPU = CPU)
     }
     
     gc()
@@ -820,187 +827,193 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     # names(df.tag.1) <- 'scRef.tag'
     # df.view.1 <- merge(df.tag.1, label.filter, by = 'row.names')
     
-    print('Build local reference')
-    df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
-    gc()
-    cell_ids <- dimnames(df.exp.merge)[[2]]
-    df.tags1 <- df.tags1[cell_ids, ]
-    df.tags1$log10Pval <- -log10(df.tags1$pvalue)
-    # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
-    
-    # df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
-    # row.names(df.view.dict) <- df.view.dict$Row.names
-    # df.view.dict$Row.names <- NULL
-    # df.tags1$cluster.merge.id <- row.names(df.tags1)
-    # df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
-    
-    # select cutoff.1 automatitically
-    if (cutoff.1 == 'default') {
-        tag.base <- data.frame(cell_id = names(list.cell.genes),
-                               tag = names(list.cell.genes))
-        df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
-        df.base$cutoff <- -log10(df.base$pvalue) * 0.2
-        df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
-        print('Default cutoff: ')
-        print(df.cutoff.1)
+    if (identify_unassigned) {
+        print('Build local reference')
+        df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
+        gc()
+        cell_ids <- dimnames(df.exp.merge)[[2]]
+        df.tags1 <- df.tags1[cell_ids, ]
+        df.tags1$log10Pval <- -log10(df.tags1$pvalue)
+        # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
         
-        select.barcode <- c()
-        for (cell in names(df.cutoff.1)) {
-            sub.cutoff <- df.cutoff.1[cell]
-            sub.select <- df.tags1[df.tags1$scRef.tag == cell, ]
-            sub.select <- sub.select[sub.select$log10Pval > sub.cutoff, ]
-            select.barcode <- c(select.barcode, row.names(sub.select))
+        # df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
+        # row.names(df.view.dict) <- df.view.dict$Row.names
+        # df.view.dict$Row.names <- NULL
+        # df.tags1$cluster.merge.id <- row.names(df.tags1)
+        # df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
+        
+        # select cutoff.1 automatitically
+        if (cutoff.1 == 'default') {
+            tag.base <- data.frame(cell_id = names(list.cell.genes),
+                                   tag = names(list.cell.genes))
+            df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
+            df.base$cutoff <- -log10(df.base$pvalue) * 0.2
+            df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
+            print('Default cutoff: ')
+            print(df.cutoff.1)
+            
+            select.barcode <- c()
+            for (cell in names(df.cutoff.1)) {
+                sub.cutoff <- df.cutoff.1[cell]
+                sub.select <- df.tags1[df.tags1$scRef.tag == cell, ]
+                sub.select <- sub.select[sub.select$log10Pval > sub.cutoff, ]
+                select.barcode <- c(select.barcode, row.names(sub.select))
+            }
+        } else {
+            # cutoff.1 <- 1e-20
+            select.df.tags <- df.tags1[df.tags1$log10Pval > cutoff.1, ]
+            select.barcode <- row.names(select.df.tags)
         }
+        LocalRef <- .generate_ref(df.exp.merge[, cell_ids %in% select.barcode],
+                                  tag1[tag1[, 'cell_id'] %in% select.barcode, ], 
+                                  min_cell = min_cell)
     } else {
-        # cutoff.1 <- 1e-20
-        select.df.tags <- df.tags1[df.tags1$log10Pval > cutoff.1, ]
-        select.barcode <- row.names(select.df.tags)
+        LocalRef <- .generate_ref(df.exp.merge, tag1, min_cell = min_cell)
     }
-    LocalRef <- .generate_ref(df.exp.merge[, cell_ids %in% select.barcode],
-                             tag1[tag1[, 'cell_id'] %in% select.barcode, ], 
-                             min_cell = min_cell)
     print('Cell types in local reference:')
     print(dimnames(LocalRef)[[2]])
     
     #####
     gc()
     #####
-    # find local marker genes
-    print('find local marker genes')
-    out.markers <- .find_markers_auto(LocalRef, topN = 100)
-    local.cell.genes <- out.markers[['list.cell.genes']]
+    if (identify_unassigned) {
+        # find local marker genes
+        print('find local marker genes')
+        out.markers <- .find_markers_auto(LocalRef, topN = 100)
+        local.cell.genes <- out.markers[['list.cell.genes']]
+    }
     
     print('Second-round annotation:')
     print(method2)
     if (method2 != 'multinomial') {
-        out2 <- .get_cor(df.exp.merge, LocalRef, method = method2,
-                         CPU = CPU, print_step = print_step)
+        out2 <- .get_cor(df.exp.merge, LocalRef, method = method2, CPU = CPU)
     } else {
-        out2 <- .get_log_p_sc_given_ref(df.exp.merge, LocalRef,
-                                       CPU = CPU, print_step = print_step)
+        out2 <- .get_log_p_sc_given_ref(df.exp.merge, LocalRef, CPU = CPU)
     }
     tag2 <- .get_tag_max(out2)
     gc()
     
-    df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
-    gc()
-    df.tags2 <- df.tags2[dimnames(df.exp.merge)[[2]], ]
-    # df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
-    # row.names(df.tags2.view) <- df.tags2.view$Row.names
-    # df.tags2.view$Row.names <- NULL
-    # names(df.tags2.view) <- c('scRef2.tag', 'pvalue', 'qvalue', 'label')
-    
-    print('Combine reference and local result:')
-    # concat reference pval and local pval
-    pvalue1 <- df.tags1[, c('scRef.tag', 'pvalue')]
-    names(pvalue1) <- c('scRef.tag.1', 'pvalue.1')
-    pvalue2 <- df.tags2
-    names(pvalue2) <- c('scRef.tag.2', 'pvalue.2')
-    pvalue <- merge(pvalue1, pvalue2, by = 'row.names')
-    row.names(pvalue) <- pvalue$Row.names
-    pvalue$Row.names <- NULL
-    
-    # select more confident tag
-    mtx.tag <- as.matrix(pvalue[, c('scRef.tag.1', 'scRef.tag.2')])
-    mtx.pval <- as.matrix(pvalue[, c('pvalue.1', 'pvalue.2')])
-    mtx.rank <- apply(mtx.pval, 1, rank, ties.method = "first")
-    tag.final <-
-        apply(as.array(1:dim(mtx.tag)[1]), 1, function(i) {
-            mtx.tag[i, mtx.rank[1, i]]
-        })
-    pval.final <-
-        apply(as.array(1:dim(mtx.pval)[1]), 1, function(i) {
-            mtx.pval[i, mtx.rank[1, i]]
-        })
-    tag.final <-
-        data.frame(
-            scRef.tag.12 = tag.final,
-            pvalue = pval.final,
-            row.names = dimnames(mtx.tag)[[1]]
-        )
-    
-    # modify tags and combine pval
-    df.tags <- merge(pvalue, tag.final, by = 'row.names')
-    row.names(df.tags) <- df.tags$Row.names
-    df.tags$Row.names <- NULL
-    
-    df.tags$log10Pval <- -log10(df.tags$pvalue)
-    
-    if (cluster.speed) {
-        df.cluster <- df.dict[, c("cluster.merge.id", "cluster.level1")]
-        df.cluster <- unique(df.cluster)
-        df.cluster <- data.frame(cluster.id = df.cluster$cluster.level1,
-                                 row.names = df.cluster$cluster.merge.id)
-    }
-    
-    # select cutoff.2 automatitically
-    if (cutoff.2 == 'default') {
-        df.tag.cluster <- merge(df.tags, df.cluster, by = 'row.names')
-        cluster.ids <- unique(df.cluster$cluster.id)
-        meta.cluster <- data.frame(stringsAsFactors = F)
-        for (cluster.id in cluster.ids) {
-            sub.tag.cluster <- df.tag.cluster[df.tag.cluster$cluster.id == cluster.id,]
-            mean.log10Pval <- mean(sub.tag.cluster$log10Pval)
-            # sd.log10Pval <- sd(sub.tag.cluster$log10Pval)
-            table.tag <- table(sub.tag.cluster$scRef.tag.12)
-            table.tag <- table.tag[order(table.tag, decreasing = T)]
-            main.cell <- names(table.tag[1])
-            percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
-            min.log10Pval <-
-                min(sub.tag.cluster[sub.tag.cluster$scRef.tag.12 == main.cell, 'log10Pval'])
-            meta.cluster <- rbind(
-                meta.cluster,
-                data.frame(
-                    cluster.id = cluster.id,
-                    mean.log10Pval = mean.log10Pval,
-                    min.log10Pval = min.log10Pval,
-                    main.cell = main.cell,
-                    percent.main.cell = percent.main.cell
-                )
+    if (identify_unassigned) {
+        df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
+        gc()
+        df.tags2 <- df.tags2[dimnames(df.exp.merge)[[2]], ]
+        # df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
+        # row.names(df.tags2.view) <- df.tags2.view$Row.names
+        # df.tags2.view$Row.names <- NULL
+        # names(df.tags2.view) <- c('scRef2.tag', 'pvalue', 'qvalue', 'label')
+        
+        print('Combine reference and local result:')
+        # concat reference pval and local pval
+        pvalue1 <- df.tags1[, c('scRef.tag', 'pvalue')]
+        names(pvalue1) <- c('scRef.tag.1', 'pvalue.1')
+        pvalue2 <- df.tags2
+        names(pvalue2) <- c('scRef.tag.2', 'pvalue.2')
+        pvalue <- merge(pvalue1, pvalue2, by = 'row.names')
+        row.names(pvalue) <- pvalue$Row.names
+        pvalue$Row.names <- NULL
+        
+        # select more confident tag
+        mtx.tag <- as.matrix(pvalue[, c('scRef.tag.1', 'scRef.tag.2')])
+        mtx.pval <- as.matrix(pvalue[, c('pvalue.1', 'pvalue.2')])
+        mtx.rank <- apply(mtx.pval, 1, rank, ties.method = "first")
+        tag.final <-
+            apply(as.array(1:dim(mtx.tag)[1]), 1, function(i) {
+                mtx.tag[i, mtx.rank[1, i]]
+            })
+        pval.final <-
+            apply(as.array(1:dim(mtx.pval)[1]), 1, function(i) {
+                mtx.pval[i, mtx.rank[1, i]]
+            })
+        tag.final <-
+            data.frame(
+                scRef.tag.12 = tag.final,
+                pvalue = pval.final,
+                row.names = dimnames(mtx.tag)[[1]]
             )
+        
+        # modify tags and combine pval
+        df.tags <- merge(pvalue, tag.final, by = 'row.names')
+        row.names(df.tags) <- df.tags$Row.names
+        df.tags$Row.names <- NULL
+        
+        df.tags$log10Pval <- -log10(df.tags$pvalue)
+        
+        if (cluster.speed) {
+            df.cluster <- df.dict[, c("cluster.merge.id", "cluster.level1")]
+            df.cluster <- unique(df.cluster)
+            df.cluster <- data.frame(cluster.id = df.cluster$cluster.level1,
+                                     row.names = df.cluster$cluster.merge.id)
         }
-        meta.cluster <- meta.cluster[order(meta.cluster$mean.log10Pval, decreasing = T), ]
-        cluster.ids <- meta.cluster$cluster.id
-        df.cutoff.2 <- data.frame()
-        vec.cell <- c()
-        for (cluster.id in cluster.ids) {
-            one.cell <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'main.cell']
-            if (!(one.cell %in% vec.cell)) {
-                one.min <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'min.log10Pval']
-                vec.cell <- c(vec.cell, one.cell)
-                df.cutoff.2 <- rbind(df.cutoff.2, 
-                                     data.frame(cutoff = one.min, 
-                                                row.names = one.cell))
+        
+        # select cutoff.2 automatitically
+        if (cutoff.2 == 'default') {
+            df.tag.cluster <- merge(df.tags, df.cluster, by = 'row.names')
+            cluster.ids <- unique(df.cluster$cluster.id)
+            meta.cluster <- data.frame(stringsAsFactors = F)
+            for (cluster.id in cluster.ids) {
+                sub.tag.cluster <- df.tag.cluster[df.tag.cluster$cluster.id == cluster.id,]
+                mean.log10Pval <- mean(sub.tag.cluster$log10Pval)
+                # sd.log10Pval <- sd(sub.tag.cluster$log10Pval)
+                table.tag <- table(sub.tag.cluster$scRef.tag.12)
+                table.tag <- table.tag[order(table.tag, decreasing = T)]
+                main.cell <- names(table.tag[1])
+                percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
+                min.log10Pval <-
+                    min(sub.tag.cluster[sub.tag.cluster$scRef.tag.12 == main.cell, 'log10Pval'])
+                meta.cluster <- rbind(
+                    meta.cluster,
+                    data.frame(
+                        cluster.id = cluster.id,
+                        mean.log10Pval = mean.log10Pval,
+                        min.log10Pval = min.log10Pval,
+                        main.cell = main.cell,
+                        percent.main.cell = percent.main.cell
+                    )
+                )
             }
+            meta.cluster <- meta.cluster[order(meta.cluster$mean.log10Pval, decreasing = T), ]
+            cluster.ids <- meta.cluster$cluster.id
+            df.cutoff.2 <- data.frame()
+            vec.cell <- c()
+            for (cluster.id in cluster.ids) {
+                one.cell <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'main.cell']
+                if (!(one.cell %in% vec.cell)) {
+                    one.min <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'min.log10Pval']
+                    vec.cell <- c(vec.cell, one.cell)
+                    df.cutoff.2 <- rbind(df.cutoff.2, 
+                                         data.frame(cutoff = one.min, 
+                                                    row.names = one.cell))
+                }
+            }
+            df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
+            print('Default cutoff: ')
+            print(df.cutoff.2)
+            df.tags$scRef.tag <- df.tags$scRef.tag.12
+            for (cell in names(df.cutoff.2)) {
+                sub.cutoff <- df.cutoff.2[cell]
+                df.tags$scRef.tag[(df.tags$scRef.tag.12 == cell) & 
+                                      (df.tags$log10Pval < sub.cutoff)] <- 'Unassigned'
+            }
+        } else {
+            print('Default cutoff: ')
+            print(cutoff.2)
+            df.tags$scRef.tag <- df.tags$scRef.tag.12
+            df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
         }
-        df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
-        print('Default cutoff: ')
-        print(df.cutoff.2)
-        df.tags$scRef.tag <- df.tags$scRef.tag.12
-        for (cell in names(df.cutoff.2)) {
-            sub.cutoff <- df.cutoff.2[cell]
-            df.tags$scRef.tag[(df.tags$scRef.tag.12 == cell) & 
-                                  (df.tags$log10Pval < sub.cutoff)] <- 'Unassigned'
+        
+        if (cluster.speed) {
+            df.tags$cluster.merge.id <- row.names(df.tags)
+            df.tags.merge <- merge(df.tags, df.dict[, c('cluster.merge.id', 'cell.id')],
+                                   by = 'cluster.merge.id')
+            df.tags.merge$cluster.merge.id <- NULL
+            row.names(df.tags.merge) <- df.tags.merge$cell.id
+            df.tags.merge$cell.id <- NULL
+            df.tags <- df.tags.merge
         }
-    } else {
-        print('Default cutoff: ')
-        print(cutoff.2)
-        df.tags$scRef.tag <- df.tags$scRef.tag.12
-        df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
+        
+        
+        df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
     }
-    
-    if (cluster.speed) {
-        df.tags$cluster.merge.id <- row.names(df.tags)
-        df.tags.merge <- merge(df.tags, df.dict[, c('cluster.merge.id', 'cell.id')],
-                               by = 'cluster.merge.id')
-        df.tags.merge$cluster.merge.id <- NULL
-        row.names(df.tags.merge) <- df.tags.merge$cell.id
-        df.tags.merge$cell.id <- NULL
-        df.tags <- df.tags.merge
-    }
-    
-    
-    df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
     
     # df.view <- merge(label.filter, df.tags, by = 'row.names')
     
@@ -1017,21 +1030,24 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     output <- list()
     output$tag1 <- tag1
     output$out1 <- out1
-    output$pvalue1 <- df.tags1
     output$tag2 <- tag2
     output$out2 <- out2
-    output$pvalue2 <- df.tags2
-    output$final.out <- df.combine
-    output$combine.out <- df.tags
-    output$run.time <- time.scRef
-    output$info.cluster <- meta.cluster
-    if (cluster.speed) {
-        output$dict.cluster <- df.dict
+    if (identify_unassigned) {
+        output$pvalue1 <- df.tags1
+        output$pvalue2 <- df.tags2
+        output$final.out <- df.combine
+        output$combine.out <- df.tags
+        output$info.cluster <- meta.cluster
+        if (cluster.speed) {
+            output$dict.cluster <- df.dict
+        }
     }
+    output$run.time <- time.scRef
     
     print('Finish!')
     
     return(output)
+    
 }
 
 
