@@ -1015,6 +1015,8 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
     }
     
+    cell_ids <- colnames(exp_sc_mat)
+    df.combine <- df.combine[cell_ids, ]
     # df.view <- merge(label.filter, df.tags, by = 'row.names')
     
     # df.view <- merge(df.combine, df.tags, by = 'row.names')
