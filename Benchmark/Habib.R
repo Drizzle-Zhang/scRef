@@ -13,7 +13,7 @@ setwd('/home/zy/scRef/try_data')
 # input file
 file.ref <- './scRef/Reference/MouseBrain_Bulk_Zhang2014/Reference_expression.txt'
 # parameters
-num.cpu <- 10
+num.cpu <- 8
 
 # reference file
 file.ref <- file.ref
@@ -125,7 +125,7 @@ exp_sc_mat <- data.filter
 # df.Habib <- data.filter
 
 # run scRef
-source('/home/zy/my_git/scRef/main/scRef.v7.R')
+source('/home/zy/my_git/scRef/main/scRef.v8.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, exp_ref_mat, type_ref = 'fpkm', 
                       cluster.speed = T, cluster.cell = 10,
@@ -159,6 +159,7 @@ metrics$f1_score(true.tag, our.tag, average = 'weighted')
 metrics$f1_score(true.tag, our.tag, average = 'macro')
 metrics$accuracy_score(true.tag, our.tag)
 
+plot.Habib <- supervised.UMAP(data.filter, meta.tag$scRef.tag)
 
 vec.cutoff <- 1:90
 

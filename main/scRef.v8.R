@@ -453,126 +453,6 @@
 }
 
 
-.find_markers_auto1 <- function(exp_ref_mat, type_ref = 'count', 
-                               out.group = 'MCA', topN = NULL) {
-  library(parallel, verbose = F)
-  library(Seurat, verbose = F)
-  # check parameters
-  if (!is.null(topN)) {
-    topN <- topN
-  } else {
-    stop('Error in finding markers: provide incorrect parameters')
-  }
-  
-  # transform count to fpm
-  if (type_ref == 'count') {
-    seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
-    seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
-                                scale.factor = 1e6, verbose = F)
-    exp_ref_mat <- as.matrix(seurat.Ref@assays$RNA@data)
-  }
-  if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
-    exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
-  }
-  
-  ###### regard a outgroup (e.g. MCA/HCA) as reference of DEG
-  seurat.MCA <- .imoprt_outgroup(out.group, num.use.gene = 10000)
-  # select high variance genes to match MCA cells
-  use.genes <- VariableFeatures(seurat.MCA)
-  fpm.MCA.high.variance <- as.matrix(seurat.MCA@assays$RNA@data[use.genes,])
-  
-  # overlap genes
-  out.overlap <- .get_overlap_genes(fpm.MCA.high.variance, exp_ref_mat)
-  fpm.MCA.high.variance <- as.matrix(out.overlap$exp_sc_mat)
-  exp_ref_mat.high.variance <- as.matrix(out.overlap$exp_ref_mat)
-  # print('Number of overlapped genes:')
-  # print(nrow(exp_ref_mat))
-  
-  # generate cov
-  out <- .get_cor(fpm.MCA.high.variance, exp_ref_mat.high.variance, 
-                  method = 'pearson', CPU = 4)
-  ref.names <- dimnames(out)[[1]]
-  MCA.names <- dimnames(out)[[2]]
-  new.ref.names <- c()
-  for (i in 1:dim(out)[1]) {
-    sub.max <- max(out[i,])
-    # print(paste0('Reference cells: ', ref.names[i]))
-    sel.names <-
-      MCA.names[order(out[i,], decreasing = T)[1]]
-    print(paste0(
-      'Reference cells: ', ref.names[i],
-      ' | ',
-      'Matched cells: ', sel.names
-    ))
-    print(paste0('Pearson coefficient: ', round(sub.max, digits = 4)))
-    new.ref.names <- c(new.ref.names, sel.names)
-  }
-  
-  fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
-  out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
-  fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
-  exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
-  
-  cell.MCA <- dimnames(fpm.MCA)[[2]]
-  cell.ref <- dimnames(exp_ref_mat)[[2]]
-  # cell.overlap <- intersect(cell.MCA, cell.ref)
-  # combat
-  library(sva, verbose = F)
-  mtx.in <- cbind(fpm.MCA, exp_ref_mat)
-  dimnames(mtx.in)[[2]] <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
-  batch <- c(rep(1, dim(fpm.MCA)[2]), rep(2, dim(exp_ref_mat)[2]))
-  cov.cell <- c(cell.MCA, new.ref.names)
-  mod <- model.matrix(~ as.factor(cov.cell))
-  mtx.combat <- ComBat(mtx.in, batch, mod, par.prior = T, ref.batch = 1)
-  mtx.combat <- scale(mtx.combat)
-  
-  # cutoff.fc <- 1.5
-  # cutoff.pval <- 0.05
-  # topN <- 100
-  # cutoff.fc <- NULL
-  # cutoff.pval <- NULL
-  list.cell.genes <- list()
-  for (i in 1:length(cell.ref)) {
-    cell <- cell.ref[i]
-    vec.cell <- mtx.combat[, paste0('Ref.', cell)]
-    vec.cell.high <- vec.cell[vec.cell > quantile(vec.cell, 0.85)]
-    vec.ref <- exp_ref_mat[, cell]
-    vec.ref.high <- vec.ref[vec.ref > quantile(vec.ref, 0.85)]
-    # high expression genes
-    genes.high <- intersect(names(vec.cell.high), names(vec.ref.high))
-    # diff in reference
-    cells <- c(setdiff(cell.ref, cell), cell)
-    bool.cell <- cells
-    bool.cell[bool.cell != cell] <- '1'
-    bool.cell[bool.cell == cell] <- '2'
-    res.limma.ref <- .getDEgeneF(exp_ref_mat[, cells], bool.cell)
-    bool.cell <- c()
-    genes.ref <-
-      row.names(res.limma.ref[((res.limma.ref$P.Value < 0.1) &
-                                 (res.limma.ref$logFC > 0.5)),])
-    use.genes <- intersect(genes.high, genes.ref)
-    
-    mtx.combat.use <- mtx.combat[, cov.cell != new.ref.names[i]]
-    mtx.limma <- cbind(mtx.combat.use, vec.cell)
-    bool.cell <- as.factor(c(rep('1', dim(mtx.combat.use)[2]), '2'))
-    res.limma <- .getDEgeneF(mtx.limma, bool.cell)
-    res.limma.high <- res.limma[use.genes,]
-    res.limma.high <- res.limma.high[res.limma.high$logFC > 0,]
-    res.limma.high <- res.limma.high[order(res.limma.high$P.Value),]
-    
-    genes.diff <- row.names(res.limma.high)[1:topN]
-    list.cell.genes[[cell]] <- genes.diff
-    
-  }
-  
-  out <- list()
-  out[['list.cell.genes']] <- list.cell.genes
-  out[['exp_ref_mat']] <- exp_ref_mat
-  return(out)
-  
-}
-
-
 .find_markers_auto <- function(exp_ref_mat, type_ref = 'count', 
                                out.group = 'MCA', topN = NULL) {
     library(parallel, verbose = F)
@@ -865,7 +745,7 @@
 
 SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA', 
                   topN = 100, cluster.speed = F, cluster.cell = 5,
-                  method1 = 'kendall', method2 = 'kendall', 
+                  method1 = 'kendall', method2 = 'multinomial', 
                   cutoff.1 = 'default', cutoff.2 = 'default',
                   min_cell = 20, CPU = 4, print_step = 100) {
     library(parallel, verbose = F)
@@ -915,6 +795,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     } else {
         df.exp.merge <- exp_sc_mat
     }
+    
     # rm(exp_sc_mat)
     gc()
     df.exp.merge <- as.matrix(df.exp.merge)
@@ -942,22 +823,40 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     print('Build local reference')
     df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
     gc()
-    df.tags1 <- df.tags1[dimnames(df.exp.merge)[[2]], ]
+    cell_ids <- dimnames(df.exp.merge)[[2]]
+    df.tags1 <- df.tags1[cell_ids, ]
     df.tags1$log10Pval <- -log10(df.tags1$pvalue)
     # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
+    
+    df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
+    row.names(df.view.dict) <- df.view.dict$Row.names
+    df.view.dict$Row.names <- NULL
+    df.tags1$cluster.merge.id <- row.names(df.tags1)
+    df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
+    
     # select cutoff.1 automatitically
     if (cutoff.1 == 'default') {
         tag.base <- data.frame(cell_id = names(list.cell.genes),
                                tag = names(list.cell.genes))
         df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
-        cutoff.1 <- -log10(max(df.base$pvalue))
+        df.base$cutoff <- -log10(df.base$pvalue) * 0.2
+        df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
         print('Default cutoff: ')
-        print(cutoff.1)
+        print(df.cutoff.1)
+        
+        select.barcode <- c()
+        for (cell in names(df.cutoff.1)) {
+            sub.cutoff <- df.cutoff.1[cell]
+            sub.select <- df.tags1[df.tags1$scRef.tag == cell, ]
+            sub.select <- sub.select[sub.select$log10Pval > sub.cutoff, ]
+            select.barcode <- c(select.barcode, row.names(sub.select))
+        }
+    } else {
+        # cutoff.1 <- 1e-20
+        select.df.tags <- df.tags1[df.tags1$log10Pval > cutoff.1, ]
+        select.barcode <- row.names(select.df.tags)
     }
-    # cutoff.1 <- 1e-20
-    select.df.tags <- df.tags1[df.tags1$log10Pval > cutoff.1, ]
-    select.barcode <- row.names(select.df.tags)
-    LocalRef <- .generate_ref(df.exp.merge[, select.barcode],
+    LocalRef <- .generate_ref(df.exp.merge[, cell_ids %in% select.barcode],
                              tag1[tag1[, 'cell_id'] %in% select.barcode, ], 
                              min_cell = min_cell)
     print('Cell types in local reference:')
@@ -1062,22 +961,33 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
         }
         meta.cluster <- meta.cluster[order(meta.cluster$mean.log10Pval, decreasing = T), ]
         cluster.ids <- meta.cluster$cluster.id
-        vec.min <- c()
+        df.cutoff.2 <- data.frame()
         vec.cell <- c()
         for (cluster.id in cluster.ids) {
             one.cell <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'main.cell']
             if (!(one.cell %in% vec.cell)) {
                 one.min <- meta.cluster[meta.cluster$cluster.id == cluster.id, 'min.log10Pval']
                 vec.cell <- c(vec.cell, one.cell)
-                vec.min <- c(vec.min, one.min)
+                df.cutoff.2 <- rbind(df.cutoff.2, 
+                                     data.frame(cutoff = one.min, 
+                                                row.names = one.cell))
             }
         }
+        df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
+        print('Default cutoff: ')
+        print(df.cutoff.2)
+        df.tags$scRef.tag <- df.tags$scRef.tag.12
+        for (cell in names(df.cutoff.2)) {
+            sub.cutoff <- df.cutoff.2[cell]
+            df.tags$scRef.tag[(df.tags$scRef.tag.12 == cell) & 
+                                  (df.tags$log10Pval < sub.cutoff)] <- 'Unassigned'
+        }
+    } else {
+        print('Default cutoff: ')
+        print(cutoff.2)
+        df.tags$scRef.tag <- df.tags$scRef.tag.12
+        df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
     }
-    cutoff.2 <- median(vec.min)
-    print('Default cutoff: ')
-    print(cutoff.2)
-    df.tags$scRef.tag <- df.tags$scRef.tag.12
-    df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
     
     if (cluster.speed) {
         df.tags$cluster.merge.id <- row.names(df.tags)
@@ -1092,7 +1002,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     
     df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
     
-    # df.view <- merge(label.filter, combine.out, by = 'row.names')
+    # df.view <- merge(label.filter, df.tags, by = 'row.names')
     
     # df.view <- merge(df.combine, df.tags, by = 'row.names')
     # row.names(df.view) <- df.view$Row.names
