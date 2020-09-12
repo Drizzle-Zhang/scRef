@@ -828,11 +828,11 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, type_ref = 'count', out.group = 'MCA'
     df.tags1$log10Pval <- -log10(df.tags1$pvalue)
     # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
     
-    df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
-    row.names(df.view.dict) <- df.view.dict$Row.names
-    df.view.dict$Row.names <- NULL
-    df.tags1$cluster.merge.id <- row.names(df.tags1)
-    df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
+    # df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
+    # row.names(df.view.dict) <- df.view.dict$Row.names
+    # df.view.dict$Row.names <- NULL
+    # df.tags1$cluster.merge.id <- row.names(df.tags1)
+    # df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
     
     # select cutoff.1 automatitically
     if (cutoff.1 == 'default') {
@@ -1066,7 +1066,7 @@ supervised.UMAP <- function(mtx.in, labels) {
     # supervised UMAP
     umap <- import('umap')
     class.umap <- umap$UMAP()
-    embedding <- class.umap$fit_transform(X = mat.pca, y = labels)
+    embedding <- class.umap$fit_transform(X = mat.pca, y = as.numeric(labels))
     dimnames(embedding)[[1]] <- dimnames(mat.pca)[[1]]
     umap.label <- CreateDimReducObject(embeddings = embedding, key = 'UMAP_')
     seurat.unlabeled@reductions$umap.label <- umap.label
