@@ -1066,7 +1066,7 @@ supervised.UMAP <- function(mtx.in, labels) {
     # supervised UMAP
     umap <- import('umap')
     class.umap <- umap$UMAP()
-    embedding <- class.umap$fit_transform(X = mat.pca, y = label.seurat)
+    embedding <- class.umap$fit_transform(X = mat.pca, y = labels)
     dimnames(embedding)[[1]] <- dimnames(mat.pca)[[1]]
     umap.label <- CreateDimReducObject(embeddings = embedding, key = 'UMAP_')
     seurat.unlabeled@reductions$umap.label <- umap.label

@@ -159,7 +159,10 @@ metrics$f1_score(true.tag, our.tag, average = 'weighted')
 metrics$f1_score(true.tag, our.tag, average = 'macro')
 metrics$accuracy_score(true.tag, our.tag)
 
-plot.Habib <- supervised.UMAP(data.filter, meta.tag$scRef.tag)
+use.cells <- dimnames(data.filter)[[2]]
+mtx.tag <- as.matrix(meta.tag)
+scRef.tags <- mtx.tag[use.cells, 'scRef.tag'] 
+plot.Habib <- supervised.UMAP(data.filter, scRef.tags)
 
 vec.cutoff <- 1:90
 
