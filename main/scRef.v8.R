@@ -988,7 +988,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
             print('Default cutoff: ')
             print(df.cutoff.2)
-            df.tags$scRef.tag <- df.tags$scRef.tag.12
+            df.tags$scRef.tag <- as.character(df.tags$scRef.tag.12)
             for (cell in names(df.cutoff.2)) {
                 sub.cutoff <- df.cutoff.2[cell]
                 df.tags$scRef.tag[(df.tags$scRef.tag.12 == cell) & 
@@ -997,7 +997,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         } else {
             print('Default cutoff: ')
             print(cutoff.2)
-            df.tags$scRef.tag <- df.tags$scRef.tag.12
+            df.tags$scRef.tag <- as.character(df.tags$scRef.tag.12)
             df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
         }
         
