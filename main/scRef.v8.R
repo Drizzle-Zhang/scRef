@@ -1013,6 +1013,11 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         
         
         df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
+    } else {
+        df.combine <- as.data.frame(tag2)
+        row.names(df.combine) <- df.combine$cell_id
+        df.combine$cell_id <- NULL
+        names(df.combine) <- 'scRef.tag'
     }
     
     cell_ids <- colnames(exp_sc_mat)
@@ -1037,13 +1042,13 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
     if (identify_unassigned) {
         output$pvalue1 <- df.tags1
         output$pvalue2 <- df.tags2
-        output$final.out <- df.combine
         output$combine.out <- df.tags
         output$info.cluster <- meta.cluster
         if (cluster.speed) {
             output$dict.cluster <- df.dict
         }
     }
+    output$final.out <- df.combine
     output$run.time <- time.scRef
     
     print('Finish!')
