@@ -1011,17 +1011,19 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             df.tags <- df.tags.merge
         }
         
-        
         df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
+        cell_ids <- colnames(exp_sc_mat)
+        df.combine <- df.combine[cell_ids, ]
+        
     } else {
         df.combine <- as.data.frame(tag2)
         row.names(df.combine) <- df.combine$cell_id
         df.combine$cell_id <- NULL
         names(df.combine) <- 'scRef.tag'
+        cell_ids <- colnames(exp_sc_mat)
+        df.combine <- data.frame(scRef.tag = df.combine[cell_ids, ], row.names = cell_ids)
     }
     
-    cell_ids <- colnames(exp_sc_mat)
-    df.combine <- df.combine[cell_ids, ]
     # df.view <- merge(label.filter, df.tags, by = 'row.names')
     
     # df.view <- merge(df.combine, df.tags, by = 'row.names')
