@@ -600,7 +600,10 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   "
   
   Data <- read.delim(DataPath,row.names = 1)
+  genes <- rownames(Data)
+  genes <- gsub('_', '.', genes)
   colnames(Data) <- gsub('_','.',colnames(Data), fixed = TRUE)
+  rownames(Data) <- genes
   Labels <- as.matrix(read.delim(LabelsPath, row.names = 1))
   load(CV_RDataPath)
   Labels <- as.vector(Labels[,col_Index])
@@ -626,22 +629,18 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       DataTrain <- Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]]
       DataTest <- Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]]
     } else{
-      DataTrain <- Data[,Train_Idx[[i]]]
-      LabelsTrain <- Labels[Train_Idx[[i]]]
-      DataTest <- Data[,Test_Idx[[i]]]
+      DataTrain <- as.matrix(Data[,Train_Idx[[i]]])
+      LabelsTrain <- data.frame(Annotation = Labels[Train_Idx[[i]]], row.names = colnames(DataTrain))
+      DataTest <- as.matrix(Data[,Test_Idx[[i]]])
     }
     
     start_time <- Sys.time()
-    class_info <- 
-      scn_train(stTrain = LabelsTrain, expTrain = DataTrain, nTopGenes = 10, 
-                nRand = 70, nTrees = 1000, nTopGenePairs = 25, 
-                dLevel = "newAnn")
+    class_info <- scn_train(stTrain = LabelsTrain, expTrain = DataTrain, dLevel = "Annotation")
     end_time <- Sys.time()
     Training_Time_singleCellNet[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
     start_time <- Sys.time()
-    DataTest<-query_transform(DataTest[cgenesA,], xpairs)
-    classRes <-rf_classPredict(rf, DataTest)
+    classRes <-scn_predict(cnProc=class_info[['cnProc']], expDat=DataTest, nrand = 50)
     end_time <- Sys.time()
     Testing_Time_singleCellNet[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
