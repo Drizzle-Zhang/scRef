@@ -529,7 +529,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   #############################################################################
   #                               scRef                                     #
   #############################################################################
-  source('/home/drizzle_zhang/my_git/scRef/main/scRef.v8.R')
+  source('/home/zy/my_git/scRef/main/scRef.v8.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
