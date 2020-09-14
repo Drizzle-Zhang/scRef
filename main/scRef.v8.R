@@ -967,7 +967,8 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                         mean.log10Pval = mean.log10Pval,
                         min.log10Pval = min.log10Pval,
                         main.cell = main.cell,
-                        percent.main.cell = percent.main.cell
+                        percent.main.cell = percent.main.cell,
+                        stringsAsFactors = F
                     )
                 )
             }
@@ -995,7 +996,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                                       (df.tags$log10Pval < sub.cutoff)] <- 'Unassigned'
             }
         } else {
-            print('Default cutoff: ')
+            print('Cutoff: ')
             print(cutoff.2)
             df.tags$scRef.tag <- as.character(df.tags$scRef.tag.12)
             df.tags$scRef.tag[df.tags$log10Pval < cutoff.2] <- 'Unassigned'
