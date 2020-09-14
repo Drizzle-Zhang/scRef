@@ -149,8 +149,8 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # scRef
 # run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
+PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
 res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
 df.sub <- data.frame(term = names(res.scRef$F1), 
                      method = rep('scRef', length(res.scRef$F1)),
@@ -212,10 +212,13 @@ df.sub <- rbind(df.sub,
 df.heatmap <- rbind(df.heatmap, df.sub)
 unique.term <- unique(df.heatmap$term)
 df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
+df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
+df.heatmap$method <- factor(df.heatmap$method, 
+                            levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
 # plot heatmap
 library(ggplot2)
-plot.heatmap <- ggplot(data = df.heatmap, aes(reorder(method, X = ), term)) + 
+plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) + 
     geom_tile(aes(fill = value)) + 
     scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
     theme_bw() +
@@ -227,4 +230,6 @@ plot.heatmap <- ggplot(data = df.heatmap, aes(reorder(method, X = ), term)) +
         axis.text.x = element_text(angle = 90)
     ) + 
     geom_text(aes(label = round(value, 2)), family = "Arial", size = 2.5)
+path <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4'
+ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap)
 

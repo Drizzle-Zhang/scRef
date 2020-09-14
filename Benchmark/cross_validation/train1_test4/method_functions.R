@@ -551,10 +551,10 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       setwd('~/my_git/scRef')
       # scRef = SCREF(test_set, train_set, type_ref = 'count',
       #               cluster.speed = T, cluster.cell = 3, min_cell = 3, CPU = 4)
-      # scRef = SCREF(test_set, train_set, type_ref = 'count',
-      #               cluster.speed = F, min_cell = 1, CPU = 4)
-      scRef = SCREF(test_set, train_set, 
-                    identify_unassigned = F, CPU = 4)
+      scRef = SCREF(test_set, train_set, type_ref = 'count',
+                    cluster.speed = F, min_cell = 1, CPU = 4)
+      # scRef = SCREF(test_set, train_set, 
+      #               identify_unassigned = F, CPU = 4)
       label.scRef <- as.character(scRef$final.out$scRef.tag)
       end_time <- Sys.time()
     }
