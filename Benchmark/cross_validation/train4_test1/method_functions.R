@@ -34,10 +34,12 @@ run_SingleR<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath =
     True_Labels_SingleR <- list()
     Pred_Labels_SingleR <- list()
     Total_Time_SingleR <- list()
-    Data = t(as.matrix(Data))
-    
+
     for (i in c(1:n_folds)){
-        if(!is.null(GeneOrderPath) & !is.null(NumGenes)){
+      train_data <- as.matrix(Data[,Train_Idx[[i]]])
+      train_label <- Labels[Train_Idx[[i]]]
+      test_set <- as.matrix(Data[,Test_Idx[[i]]])
+      if(!is.null(GeneOrderPath) & !is.null(NumGenes)){
             start_time <- Sys.time()
             singler = SingleR(method = "single", Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]], 
                               Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]], 
@@ -46,7 +48,9 @@ run_SingleR<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath =
         }
         else{
             start_time <- Sys.time()
-            singler = SingleR(method = "single", Data[,Test_Idx[[i]]], Data[,Train_Idx[[i]]], Labels[Train_Idx[[i]]], numCores = 1)
+            singler = SingleR(method = "single", sc_data = test_set, 
+                              ref_data = train_data, 
+                              types = train_label, numCores = 1)
             end_time <- Sys.time()
         }
         Total_Time_SingleR[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
@@ -115,7 +119,7 @@ run_scmap <- function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   Testing_Time_scmapcluster <- list()
   Training_Time_scmapcell <- list()
   Testing_Time_scmapcell <- list()
-  Data = t(as.matrix(Data))
+  Data = as.matrix(Data)
   
   for (i in c(1:n_folds)){
     if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -248,7 +252,7 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   True_Labels_CHETAH <- list()
   Pred_Labels_CHETAH <- list()
   Total_Time_CHETAH <- list()
-  Data = t(as.matrix(Data))
+  Data = as.matrix(Data)
   
   for (i in c(1:n_folds)){
     if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -337,7 +341,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   Pred_Labels_scPred <- list()
   Training_Time_scPred <- list()
   Testing_Time_scPred <- list()
-  Data = t(as.matrix(Data))
+  Data = as.matrix(Data)
   
   for (i in c(1:n_folds)){
     if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -392,6 +396,9 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   Pred_Labels_scPred <- as.vector(unlist(Pred_Labels_scPred))
   Training_Time_scPred <- as.vector(unlist(Training_Time_scPred))
   Testing_Time_scPred <- as.vector(unlist(Testing_Time_scPred))
+  Pred_Labels_scPred <- gsub('pyramidal.SS','pyramidal SS', Pred_Labels_scPred)
+  Pred_Labels_scPred <- gsub('pyramidal.CA1','pyramidal CA1', Pred_Labels_scPred)
+  Pred_Labels_scPred <- gsub('endothelial.mural','endothelial-mural', Pred_Labels_scPred)
   
   setwd(OutputDir)
   
@@ -491,7 +498,8 @@ run_sciBet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
 }
 
 
-run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
+run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
+                    GeneOrderPath = NULL,NumGenes = NULL){
   "
   run scRef
   Wrapper script to run scPred on a benchmark dataset with 5-fold cross validation,
@@ -519,9 +527,9 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = N
   }
   
   #############################################################################
-  #                               sciBet                                     #
+  #                               scRef                                     #
   #############################################################################
-  source('/home/drizzle_zhang/my_git/scRef/main/scRef.v7.R')
+  source('/home/drizzle_zhang/my_git/scRef/main/scRef.v8.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
@@ -540,14 +548,19 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = N
     } else {
       start_time <- Sys.time()
       setwd('~/my_git/scRef')
-      scRef = SCREF(test_set, train_set, type_ref = 'count', 
-                    cluster.speed = F, min_cell = 1, CPU = 1)
+      # scRef = SCREF(test_set, train_set, type_ref = 'count',
+      #               cluster.speed = T, cluster.cell = 3, min_cell = 3, CPU = 4)
+      # scRef = SCREF(test_set, train_set, type_ref = 'count',
+      #               cluster.speed = F, min_cell = 1, CPU = 4)
+      scRef = SCREF(test_set, train_set, 
+                    identify_unassigned = F, CPU = 4)
+      label.scRef <- as.character(scRef$final.out$scRef.tag)
       end_time <- Sys.time()
     }
     Total_Time_scRef[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
     True_Labels_scRef[i] <- list(Labels[Test_Idx[[i]]])
-    Pred_Labels_scRef[i] <- list(scRef)
+    Pred_Labels_scRef[i] <- list(label.scRef)
   }
   True_Labels_scRef <- as.vector(unlist(True_Labels_scRef))
   Pred_Labels_scRef <- as.vector(unlist(Pred_Labels_scRef))
@@ -559,8 +572,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = N
     write.csv(True_Labels_scRef,paste('scRef_',NumGenes,'_True_Labels.csv', sep = ''),row.names = FALSE)
     write.csv(Pred_Labels_scRef,paste('scRef_',NumGenes,'_Pred_Labels.csv', sep = ''),row.names = FALSE)
     write.csv(Total_Time_scRef,paste('scRef_',NumGenes,'_Total_Time.csv', sep = ''),row.names = FALSE)
-  }
-  else{
+  } else{
     write.csv(True_Labels_scRef,'scRef_True_Labels.csv',row.names = FALSE)
     write.csv(Pred_Labels_scRef,'scRef_Pred_Labels.csv',row.names = FALSE)
     write.csv(Total_Time_scRef,'scRef_Total_Time.csv',row.names = FALSE)
@@ -568,7 +580,8 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = N
 }
 
 
-run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
+run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
+                            GeneOrderPath = NULL,NumGenes = NULL){
   "
   run singleCellNet
   Wrapper script to run singleCellNet on a benchmark dataset with 5-fold cross validation,
@@ -586,9 +599,9 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
   NumGenes : Number of genes used in case of feature selection (integer), default is NULL.
   "
   
-  Data <- read.csv(DataPath,row.names = 1)
+  Data <- read.delim(DataPath,row.names = 1)
   colnames(Data) <- gsub('_','.',colnames(Data), fixed = TRUE)
-  Labels <- as.matrix(read.csv(LabelsPath))
+  Labels <- as.matrix(read.delim(LabelsPath, row.names = 1))
   load(CV_RDataPath)
   Labels <- as.vector(Labels[,col_Index])
   Data <- Data[Cells_to_Keep,]
@@ -606,26 +619,23 @@ run_singleCellNet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrder
   Pred_Labels_singleCellNet <- list()
   Training_Time_singleCellNet <- list()
   Testing_Time_singleCellNet <- list()
-  Data = t(as.matrix(Data))              # deals also with sparse matrix
+  # Data = as.matrix(Data)            # deals also with sparse matrix
   
   for(i in c(1:n_folds)){
     if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
       DataTrain <- Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]]
       DataTest <- Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]]
-    }
-    else{
+    } else{
       DataTrain <- Data[,Train_Idx[[i]]]
+      LabelsTrain <- Labels[Train_Idx[[i]]]
       DataTest <- Data[,Test_Idx[[i]]]
     }
     
     start_time <- Sys.time()
-    cgenes2<-findClassyGenes(DataTrain, data.frame(Annotation = Labels[Train_Idx[[i]]]), "Annotation")
-    cgenesA<-cgenes2[['cgenes']]
-    grps<-cgenes2[['grps']]
-    DataTrain<-as.matrix(DataTrain[cgenesA,])
-    xpairs<-ptGetTop(DataTrain, grps, ncores = 1)
-    pdTrain<-query_transform(DataTrain[cgenesA, ], xpairs)
-    rf<-sc_makeClassifier(pdTrain[xpairs,], genes=xpairs, groups=grps)
+    class_info <- 
+      scn_train(stTrain = LabelsTrain, expTrain = DataTrain, nTopGenes = 10, 
+                nRand = 70, nTrees = 1000, nTopGenePairs = 25, 
+                dLevel = "newAnn")
     end_time <- Sys.time()
     Training_Time_singleCellNet[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     

@@ -19,14 +19,20 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   PercUnl : percentage of unlabeled cells
   PopSize : number of cells per cell type
   "
+  # import python package: sklearn.metrics
+  library(reticulate)
+  # use_python('/home/drizzle_zhang/tools/anaconda3/bin/python3', required = T)
+  # py_config()
+  py_module_available('sklearn')
+  metrics <- import('sklearn.metrics')
   
-  true_lab <- unlist(read.csv(TrueLabelsPath))
-  pred_lab <- unlist(read.csv(PredLabelsPath))
+  true_lab <- unlist(read.csv(TrueLabelsPath, stringsAsFactors = F))
+  pred_lab <- unlist(read.csv(PredLabelsPath, stringsAsFactors = F))
   
   unique_true <- unlist(unique(true_lab))
-  unique_pred <- unlist(unique(pred_lab))
+  # unique_pred <- unlist(unique(pred_lab))
   
-  unique_all <- unique(c(unique_true,unique_pred))
+  # unique_all <- unique(c(unique_true,unique_pred))
   conf <- table(true_lab,pred_lab)
   pop_size <- rowSums(conf)
   
@@ -37,9 +43,9 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   F1 <- vector()
   sum_acc <- 0
   
-  for (i in c(1:length(unique_true))){
-    findLabel = colnames(conf_F1) == row.names(conf_F1)[i]
-    if(sum(findLabel)){
+  for (i in c(1:length(unique_true))) {
+    findLabel = colnames(conf_F1) == (row.names(conf_F1))[i]
+    if (sum(findLabel) > 0) {
       prec <- conf_F1[i,findLabel] / colSums(conf_F1)[findLabel]
       rec <- conf_F1[i,findLabel] / rowSums(conf_F1)[i]
       if (prec == 0 || rec == 0){
@@ -56,14 +62,26 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   names(F1) <- names(pop_size)
   
   med_F1 <- median(F1)
-
-  total <- length(pred_lab)
-  num_unlab <- sum(pred_lab == 'unassigned') + sum(pred_lab == 'Unassigned') + sum(pred_lab == 'rand') + sum(pred_lab == 'Unknown') + sum(pred_lab == 'Node') + sum(pred_lab == 'ambiguous')
-  per_unlab <- num_unlab / total
+  mean_F1 <- mean(F1)
   
   acc <- sum_acc/sum(conf_F1)
   
-  result <- list(Conf = conf, MedF1 = med_F1, F1 = F1, Acc = acc, PercUnl = per_unlab, PopSize = pop_size)
+  total <- length(pred_lab)
+  # num_unlab <- sum(pred_lab == 'unassigned') + sum(pred_lab == 'Unassigned') + sum(pred_lab == 'rand') + sum(pred_lab == 'Unknown') + sum(pred_lab == 'Node') + sum(pred_lab == 'ambiguous')
+  num_unlab <- sum(!(pred_lab %in% unique_true))
+  per_unlab <- num_unlab / total
+  
+  true_lab <- true_lab[(pred_lab %in% unique_true)]
+  pred_lab <- pred_lab[(pred_lab %in% unique_true)]
+  
+  weighted.macro.F1 <- metrics$f1_score(true_lab, pred_lab, average = 'weighted')
+  # metrics$f1_score(true_lab, pred_lab, average = 'macro')
+  # metrics$accuracy_score(true_lab, pred_lab)
+  
+  result <- list(Conf = conf, MedF1 = med_F1, F1 = F1, Mean_F1 = mean_F1, 
+                 WMean_F1 = weighted.macro.F1, Acc = acc, 
+                 PercUnl = per_unlab, PopSize = pop_size)
   
   return(result)
+  
 }
