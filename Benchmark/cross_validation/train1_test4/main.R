@@ -1,27 +1,51 @@
-# setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train4_test1')
+# setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train1_test4')
 # source('./Cross_Validation.R')
 # source('./method_functions.R')
 # source('./evaluate.R')
 # 
 # path.input <- '/home/zy/scRef/'
-# path.output <- '/home/zy/scRef/cross_validation/train4_test1/'
+# path.output <- '/home/zy/scRef/cross_validation/train1_test4/'
 
-setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
+setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train1_test4')
 source('./Cross_Validation.R')
 source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/drizzle_zhang/scRef/'
-path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
+path.output <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4/'
 
 # generate cross validation dataset
 LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
 OutputDir <- path.output
-# Cross_Validation(LabelsPath, OutputDir)
+if (!file.exists(OutputDir)) {
+    dir.create(OutputDir)
+}
+Cross_Validation(LabelsPath, OutputDir)
 
 DataPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
 LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
 CV_RDataPath <- paste0(path.output, 'CV_folds.RData')
+
+# run methods
+# SingleR
+run_SingleR(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scmap
+run_scmap(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# CHETAH
+run_CHETAH(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scPred
+run_scPred(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# sciBet
+run_sciBet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scRef
+run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# singleCellNet
+# run_singleCellNet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# CaSTLe
+run_CaSTLe(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scID
+run_scID(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+
 
 # heatmap
 df.heatmap <- data.frame(stringsAsFactors = F)
@@ -188,13 +212,10 @@ df.sub <- rbind(df.sub,
 df.heatmap <- rbind(df.heatmap, df.sub)
 unique.term <- unique(df.heatmap$term)
 df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
-df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
-df.heatmap$method <- factor(df.heatmap$method, 
-                            levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
 # plot heatmap
 library(ggplot2)
-plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) + 
+plot.heatmap <- ggplot(data = df.heatmap, aes(reorder(method, X = ), term)) + 
     geom_tile(aes(fill = value)) + 
     scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
     theme_bw() +
@@ -203,9 +224,7 @@ plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) +
         panel.grid = element_blank(),
         panel.border = element_blank(),
         axis.title = element_blank(),
-        axis.text.x = element_text(angle = 45, vjust = 0.6)
+        axis.text.x = element_text(angle = 90)
     ) + 
     geom_text(aes(label = round(value, 2)), family = "Arial", size = 2.5)
-path <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1'
-ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap)
 
