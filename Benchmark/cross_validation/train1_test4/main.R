@@ -221,15 +221,17 @@ library(ggplot2)
 plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) + 
     geom_tile(aes(fill = value)) + 
     scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    labs(fill = '') + 
     theme_bw() +
     theme(
         axis.ticks = element_blank(),
         panel.grid = element_blank(),
         panel.border = element_blank(),
         axis.title = element_blank(),
-        axis.text.x = element_text(angle = 90)
+        axis.text.x = element_text(angle = 45, vjust = 0.6)
     ) + 
-    geom_text(aes(label = round(value, 2)), family = "Arial", size = 2.5)
+    geom_text(aes(label = round(value, 3)), family = "Arial", size = 2.5)
 path <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4'
-ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap)
+ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap,
+       units = 'cm', height = 10, width = 18)
 

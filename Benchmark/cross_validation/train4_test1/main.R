@@ -207,5 +207,6 @@ plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) +
     ) + 
     geom_text(aes(label = round(value, 2)), family = "Arial", size = 2.5)
 path <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1'
-ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap)
+ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap,
+       units = 'cm', height = 10, width = 18)
 

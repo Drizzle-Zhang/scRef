@@ -1,18 +1,18 @@
-# setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train1_test4')
+# setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train1_test4_add_noise_delete_cell')
 # source('./Cross_Validation.R')
 # source('./method_functions.R')
 # source('./evaluate.R')
 # 
 # path.input <- '/home/zy/scRef/'
-# path.output <- '/home/zy/scRef/cross_validation/train1_test4/'
+# path.output <- '/home/zy/scRef/cross_validation/train1_test4_add_noise_delete_cell/'
 
-setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train1_test4_add_noise')
+setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train1_test4_add_noise_delete_cell')
 source('./Cross_Validation.R')
 source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/drizzle_zhang/scRef/'
-path.output <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4_add_noise/'
+path.output <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4_add_noise_delete_cell/'
 
 # generate cross validation dataset
 LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
@@ -20,7 +20,9 @@ OutputDir <- path.output
 if (!file.exists(OutputDir)) {
     dir.create(OutputDir)
 }
-# Cross_Validation(LabelsPath, OutputDir)
+# delete cells
+del.cells <- c('endothelial-mural', 'microglia')
+Cross_Validation(LabelsPath, OutputDir, del.cells)
 
 DataPath.origin <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
 ############
@@ -72,7 +74,7 @@ df.heatmap <- data.frame(stringsAsFactors = F)
 # run_SingleR(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'SingleR_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'SingleR_Pred_Labels.csv')
-res.SingleR <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.SingleR <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.SingleR$F1), 
                      method = rep('SingleR', length(res.SingleR$F1)),
                      value = res.SingleR$F1, stringsAsFactors = F)
@@ -89,7 +91,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_scmap(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scmapcell_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'scmapcell_Pred_Labels.csv')
-res.scmapcell <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.scmapcell <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 
 df.sub <- data.frame(term = names(res.scmapcell$F1), 
                      method = rep('scmap-cell', length(res.scmapcell$F1)),
@@ -103,7 +105,7 @@ df.sub <- rbind(df.sub,
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 PredLabelsPath <- paste0(OutputDir, 'scmapcluster_Pred_Labels.csv')
-res.scmapcluster <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.scmapcluster <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 
 df.sub <- data.frame(term = names(res.scmapcluster$F1), 
                      method = rep('scmap-cluster', length(res.scmapcluster$F1)),
@@ -120,7 +122,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_CHETAH(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'CHETAH_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'CHETAH_Pred_Labels.csv')
-res.CHETAH <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.CHETAH <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.CHETAH$F1), 
                      method = rep('CHETAH', length(res.CHETAH$F1)),
                      value = res.CHETAH$F1, stringsAsFactors = F)
@@ -136,7 +138,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_scPred(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scPred_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'scPred_Pred_Labels.csv')
-res.scPred <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.scPred <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.scPred$F1), 
                      method = rep('scPred', length(res.scPred$F1)),
                      value = res.scPred$F1, stringsAsFactors = F)
@@ -152,7 +154,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_sciBet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'sciBet_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'sciBet_Pred_Labels.csv')
-res.sciBet <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.sciBet <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.sciBet$F1), 
                      method = rep('sciBet', length(res.sciBet$F1)),
                      value = res.sciBet$F1, stringsAsFactors = F)
@@ -169,7 +171,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
 # PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
 PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
-res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.scRef$F1), 
                      method = rep('scRef', length(res.scRef$F1)),
                      value = res.scRef$F1, stringsAsFactors = F)
@@ -185,7 +187,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_singleCellNet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'singleCellNet_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'singleCellNet_Pred_Labels.csv')
-res.singleCellNet <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.singleCellNet <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.singleCellNet$F1), 
                      method = rep('singleCellNet', length(res.singleCellNet$F1)),
                      value = res.singleCellNet$F1, stringsAsFactors = F)
@@ -201,7 +203,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_CaSTLe(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'CaSTLe_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'CaSTLe_Pred_Labels.csv')
-res.CaSTLe <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.CaSTLe <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.CaSTLe$F1), 
                      method = rep('CaSTLe', length(res.CaSTLe$F1)),
                      value = res.CaSTLe$F1, stringsAsFactors = F)
@@ -217,7 +219,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # run_scID(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scID_True_Labels.csv')
 PredLabelsPath <- paste0(OutputDir, 'scID_Pred_Labels.csv')
-res.scID <- evaluate(TrueLabelsPath, PredLabelsPath)
+res.scID <- evaluate(TrueLabelsPath, PredLabelsPath, del.cells)
 df.sub <- data.frame(term = names(res.scID$F1), 
                      method = rep('scID', length(res.scID$F1)),
                      value = res.scID$F1, stringsAsFactors = F)
@@ -249,7 +251,7 @@ plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) +
         axis.text.x = element_text(angle = 45, vjust = 0.6)
     ) + 
     geom_text(aes(label = round(value, 3)), family = "Arial", size = 2.5)
-path <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4_add_noise'
+path <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4_add_noise_delete_cell'
 ggsave(filename = 'heatmap.png', path = path, plot = plot.heatmap,
        units = 'cm', height = 10, width = 18)
 
