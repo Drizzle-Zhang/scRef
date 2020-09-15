@@ -20,7 +20,7 @@ OutputDir <- path.output
 if (!file.exists(OutputDir)) {
     dir.create(OutputDir)
 }
-Cross_Validation(LabelsPath, OutputDir)
+# Cross_Validation(LabelsPath, OutputDir)
 
 DataPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
 LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
@@ -212,7 +212,7 @@ df.sub <- rbind(df.sub,
 df.heatmap <- rbind(df.heatmap, df.sub)
 unique.term <- unique(df.heatmap$term)
 df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
-df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
+df.acc <- df.heatmap[df.heatmap$term == 'macro F1', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
 

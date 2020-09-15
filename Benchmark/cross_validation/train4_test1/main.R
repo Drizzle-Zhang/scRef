@@ -125,8 +125,8 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # scRef
 # run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
+PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
 res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
 df.sub <- data.frame(term = names(res.scRef$F1), 
                      method = rep('scRef', length(res.scRef$F1)),

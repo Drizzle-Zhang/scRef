@@ -36,6 +36,7 @@ DataPath.origin <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
 # nData[which(nData<0)]=0
 # rownames(nData)=rownames(Data)
 # colnames(nData)=colnames(Data)
+# nData <- round(nData, digits = 4)
 # file.noise <- paste0(OutputDir, 'Data_noise.txt')
 # write.table(nData, file = file.noise, sep = '\t')
 ############
@@ -166,8 +167,8 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 # scRef
 # run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
+PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
 res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
 df.sub <- data.frame(term = names(res.scRef$F1), 
                      method = rep('scRef', length(res.scRef$F1)),

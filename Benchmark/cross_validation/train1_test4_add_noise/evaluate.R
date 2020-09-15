@@ -20,11 +20,11 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   PopSize : number of cells per cell type
   "
   # import python package: sklearn.metrics
-  library(reticulate)
-  # use_python('/home/drizzle_zhang/tools/anaconda3/bin/python3', required = T)
-  # py_config()
-  py_module_available('sklearn')
-  metrics <- import('sklearn.metrics')
+  # library(reticulate)
+  # # use_python('/home/drizzle_zhang/tools/anaconda3/bin/python3', required = T)
+  # # py_config()
+  # py_module_available('sklearn')
+  # metrics <- import('sklearn.metrics')
   
   true_lab <- unlist(read.csv(TrueLabelsPath, stringsAsFactors = F))
   pred_lab <- unlist(read.csv(PredLabelsPath, stringsAsFactors = F))
@@ -74,13 +74,13 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   true_lab <- true_lab[(pred_lab %in% unique_true)]
   pred_lab <- pred_lab[(pred_lab %in% unique_true)]
   
-  weighted.macro.F1 <- metrics$f1_score(true_lab, pred_lab, average = 'weighted')
+  # weighted.macro.F1 <- metrics$f1_score(true_lab, pred_lab, average = 'weighted')
   # metrics$f1_score(true_lab, pred_lab, average = 'macro')
   # metrics$accuracy_score(true_lab, pred_lab)
   
   result <- list(Conf = conf, MedF1 = med_F1, F1 = F1, Mean_F1 = mean_F1, 
-                 WMean_F1 = weighted.macro.F1, Acc = acc, 
-                 PercUnl = per_unlab, PopSize = pop_size)
+                 # WMean_F1 = weighted.macro.F1, 
+                 Acc = acc, PercUnl = per_unlab, PopSize = pop_size)
   
   return(result)
   

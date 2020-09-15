@@ -300,7 +300,8 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
 }
 
 
-run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
+run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
+                     GeneOrderPath = NULL,NumGenes = NULL){
   "
   run scPred
   Wrapper script to run scPred on a benchmark dataset with 5-fold cross validation,
@@ -324,7 +325,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   Labels <- as.vector(Labels[,col_Index])
   Data <- Data[Cells_to_Keep,]
   print(dim(Data))
-  print(dim(Labels))
+  print(length(Labels))
   
   Labels <- Labels[Cells_to_Keep]
   if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -341,7 +342,7 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   Pred_Labels_scPred <- list()
   Training_Time_scPred <- list()
   Testing_Time_scPred <- list()
-  Data = as.matrix(Data)
+  Data = as.matrix(round(Data))
   
   for (i in c(1:n_folds)){
     if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -554,7 +555,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       # scRef = SCREF(test_set, train_set, type_ref = 'count',
       #               cluster.speed = F, min_cell = 1, CPU = 4)
       scRef = SCREF(test_set, train_set, 
-                    identify_unassigned = F, CPU = 4)
+                    identify_unassigned = F, CPU = 6)
       label.scRef <- as.character(scRef$final.out$scRef.tag)
       end_time <- Sys.time()
     }

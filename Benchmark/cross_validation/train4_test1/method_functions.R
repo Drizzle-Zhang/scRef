@@ -529,7 +529,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   #############################################################################
   #                               scRef                                     #
   #############################################################################
-  source('/home/zy/my_git/scRef/main/scRef.v8.R')
+  source('/home/drizzle_zhang/my_git/scRef/main/scRef.v8.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
@@ -552,8 +552,8 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       #               cluster.speed = T, cluster.cell = 3, min_cell = 3, CPU = 4)
       # scRef = SCREF(test_set, train_set, type_ref = 'count',
       #               cluster.speed = F, min_cell = 1, CPU = 4)
-      scRef = SCREF(test_set, train_set, 
-                    identify_unassigned = F, CPU = 4)
+      scRef = SCREF(test_set, train_set,
+                    identify_unassigned = F, CPU = 6)
       label.scRef <- as.character(scRef$final.out$scRef.tag)
       end_time <- Sys.time()
     }
