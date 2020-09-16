@@ -10,6 +10,11 @@ dimnames(data.filter)[[2]] <- hpbmc$all_data$`17820`$hg19$barcodes
 label.filter <- read.delim('./68k_pbmc_barcodes_annotation.tsv', row.names = 1)
 label.filter <- as.matrix(label.filter)[dimnames(data.filter)[[2]],]
 
+# sample
+sub.barcode <- sample(dimnames(data.filter)[[2]], 10000)
+data.filter <- data.filter[, sub.barcode]
+label.filter <- label.filter[sub.barcode]
+
 # data preparing
 seurat.unlabeled <- CreateSeuratObject(counts = data.filter)
 seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize", 
