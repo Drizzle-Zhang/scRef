@@ -12,18 +12,18 @@ source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/drizzle_zhang/scRef/'
-path.output <- '/home/drizzle_zhang/scRef/cross_validation/train1_test4/'
+path.output <- '/home/drizzle_zhang/scRef/cross_validation/Tasic/train1_test4/'
 
 # generate cross validation dataset
-LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
+LabelsPath <- paste0(path.input, 'summary/Tasic_exp_sc_mat_cluster_original.txt')
 OutputDir <- path.output
 if (!file.exists(OutputDir)) {
     dir.create(OutputDir)
 }
-# Cross_Validation(LabelsPath, OutputDir)
+Cross_Validation(LabelsPath, OutputDir)
 
-DataPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
-LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
+DataPath <- paste0(path.input, 'summary/Tasic_exp_sc_mat.txt')
+LabelsPath <- paste0(path.input, 'summary/Tasic_exp_sc_mat_cluster_original.txt')
 CV_RDataPath <- paste0(path.output, 'CV_folds.RData')
 
 # run methods

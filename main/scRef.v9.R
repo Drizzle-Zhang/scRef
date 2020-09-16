@@ -750,7 +750,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                   cluster.speed = F, cluster.cell = 5,
                   method1 = 'kendall', method2 = 'multinomial', 
                   cutoff.1 = 'default', cutoff.2 = 'default',
-                  threshold.recall = 0.2,
+                  threshold.recall = 0.1,
                   min_cell = 1, CPU = 4) {
     library(parallel, verbose = F)
     # check parameters
@@ -972,6 +972,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                 quartile.range <-
                     quantile(main.cell.log10Pval, 0.75) - quantile(main.cell.log10Pval, 0.25)
                 median.log10Pval <- median(main.cell.log10Pval)
+                down.quartile <- quantile(main.cell.log10Pval, 0.25)
                 max.log10Pval <- max(main.cell.log10Pval)
                 uplimit <- min(max.log10Pval, median.log10Pval + quartile.range)
                 min.log10Pval <- min(main.cell.log10Pval)
@@ -988,6 +989,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                         max.log10Pval = max.log10Pval,
                         uplimit = uplimit,
                         min.log10Pval = min.log10Pval,
+                        down.quartile = down.quartile,
                         downlimit = downlimit,
                         stringsAsFactors = F
                     )
@@ -999,7 +1001,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                 cell.cutoff <- df.base.local[main.cell]
                 sub.cluster <-
                     meta.cluster[(meta.cluster$main.cell == main.cell) & 
-                                     (meta.cluster$median.log10Pval > cell.cutoff), ]
+                                     (meta.cluster$down.quartile > cell.cutoff), ]
                 one.min <- min(c(sub.cluster$downlimit, cell.cutoff))
                 df.cutoff.2 <- rbind(df.cutoff.2,
                                      data.frame(cutoff = one.min,
