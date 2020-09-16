@@ -549,19 +549,20 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
     } else {
       start_time <- Sys.time()
       setwd('~/my_git/scRef')
+      scRef = SCREF(test_set, train_set, type_ref = 'count',
+                    cluster.speed = T, cluster.cell = 5, min_cell = 5, CPU = 4)
       # scRef = SCREF(test_set, train_set, type_ref = 'count',
-      #               cluster.num.pc = 20, cluster.resolution = 1, 
-      #               cluster.speed = T, cluster.cell = 3, min_cell = 3, CPU = 4)
-      # scRef = SCREF(test_set, train_set, type_ref = 'count',
-      #               cluster.num.pc = 20, cluster.resolution = 1,
+      #               cluster.num.pc = 50, cluster.resolution = 0.5,
       #               cluster.speed = F, min_cell = 1, CPU = 6)
-      scRef = SCREF(test_set, train_set,
-                    identify_unassigned = F, CPU = 7)
+      # scRef = SCREF(test_set, train_set,
+      #               identify_unassigned = F, CPU = 7)
       label.scRef <- as.character(scRef$final.out$scRef.tag)
       end_time <- Sys.time()
     }
     Total_Time_scRef[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
+    # label.filter <- data.frame(true.label = Labels[Test_Idx[[i]]],
+    #                            row.names = colnames(test_set))
     True_Labels_scRef[i] <- list(Labels[Test_Idx[[i]]])
     Pred_Labels_scRef[i] <- list(label.scRef)
   }
