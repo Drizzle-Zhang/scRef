@@ -847,7 +847,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             tag.base <- data.frame(cell_id = names(list.cell.genes),
                                    tag = names(list.cell.genes))
             df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
-            df.base$cutoff <- -log10(df.base$pvalue) * 0.2
+            df.base$cutoff <- -log10(df.base$pvalue) * 0.5
             df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
             print('Default cutoff: ')
             print(df.cutoff.1)
