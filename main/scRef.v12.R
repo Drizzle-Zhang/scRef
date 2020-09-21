@@ -24,6 +24,28 @@
 }
 
 
+.get_high_variance_genes <- function(exp_ref_mat, num.genes = 2000, type_ref = 'count') {
+    if (type_ref == 'count') {
+        seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
+        seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
+                                    scale.factor = 1e6, verbose = F)
+    }
+    if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
+        exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
+        seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
+        seurat.Ref@assays$RNA@data <- exp_ref_mat
+    }
+    seurat.Ref <- FindVariableFeatures(
+        seurat.Ref,
+        selection.method = "vst",
+        nfeatures = num.genes,
+        verbose = F
+    )
+    return(VariableFeatures(seurat.Ref))
+    
+}
+
+
 .one_multinomial <- function(i, exp_sc_mat, exp_ref_mat, colname_ref, 
                              verbose, print_step) {
     delta <- 0.5
@@ -324,7 +346,7 @@
 }
 
 
-.imoprt_outgroup <- function(out.group = 'MCA', opt.SEG = F) {
+.imoprt_outgroup <- function(out.group = 'MCA', use.RUVseq = T) {
     library(Seurat, verbose = F)
     if (class(out.group)[1] %in% c("data.frame", "matrix")) {
         df.out.group <- out.group
@@ -348,19 +370,13 @@
     seurat.out.group <- 
         NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
                       scale.factor = 1e6, verbose = F)
-    if (opt.SEG) {
+    if (use.RUVseq) {
+        # get stably expression genes
         seurat.out.group <- FindVariableFeatures(
             seurat.out.group, selection.method = "mvp",
             mean.cutoff = c(3, Inf), dispersion.cutoff = c(-0.05, 0.05), verbose = F)
     }
-    
-    # if (!is.null(num.use.gene)) {
-    #     seurat.out.group <- FindVariableFeatures(
-    #         seurat.out.group, selection.method = "vst",
-    #         nfeatures = num.use.gene, verbose = F)
-    #     # VariableFeaturePlot(seurat.out.group)
-    # }
-    
+
     return(seurat.out.group)
     
 }
@@ -458,8 +474,8 @@
 }
 
 
-.find_markers_RUVseq <- function(exp_ref_mat, type_ref = 'count', 
-                               out.group = 'MCA', topN = NULL) {
+.find_markers_auto <- function(exp_ref_mat, out.group, 
+                               type_ref = 'count', use.RUVseq = T, topN = 100) {
     library(parallel, verbose = F)
     library(Seurat, verbose = F)
     # check parameters
@@ -481,36 +497,19 @@
     }
     
     ###### regard a outgroup (e.g. MCA/HCA) as reference of DEG
-    if (out.group == 'MCA') {
-        file.out.group <- './CellAtlas/MCA.txt'
-        df.out.group <- 
-            read.table(file.out.group, header = T, row.names = 1, 
-                       sep = '\t', check.names = F)
-        seurat.out.group <- 
-            CreateSeuratObject(counts = df.out.group, project = "out.group", 
-                               min.cells = 1, min.features = 5000)
-        seurat.out.group <- 
-            NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
-                          scale.factor = 1e6, verbose = F)
-        seurat.out.group <- FindVariableFeatures(
-            seurat.out.group,
-            selection.method = "mvp",
-            mean.cutoff = c(3, Inf),
-            dispersion.cutoff = c(-0.05, 0.05),
-            verbose = F
-        )
-    }
-    seurat.MCA <- seurat.out.group
+    seurat.MCA <- out.group
     fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
-    SEG.MCA <- VariableFeatures(seurat.MCA)
     
     # overlap genes
     fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
     out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
     fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
     exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
-    gene_overlap <- out.overlap$gene_over
-    gene.constant <- intersect(gene_overlap, SEG.MCA)
+    if (use.RUVseq) {
+        gene_overlap <- out.overlap$gene_over
+        SEG.MCA <- VariableFeatures(seurat.MCA)
+        gene.constant <- intersect(gene_overlap, SEG.MCA)
+    }
     # print('Number of overlapped genes:')
     # print(nrow(exp_ref_mat))
     
@@ -520,13 +519,14 @@
     mtx.in <- cbind(fpm.MCA, exp_ref_mat)
     names.mix <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
     dimnames(mtx.in)[[2]] <- names.mix
-    # seurat.mix <- CreateSeuratObject(mtx.in)
-    # seurat.mix@assays$RNA@data <- mtx.in
-    # seurat.mix <- ScaleData(seurat.mix, verbose = F)
-    # mtx.combat <- seurat.mix@assays$RNA@scale.data
-    library(RUVSeq)
-    seqRUVg <- RUVg(as.matrix(mtx.in), gene.constant, k=1, isLog = T)
-    mtx.combat <- seqRUVg$normalizedCounts
+    if (use.RUVseq) {
+        library(RUVSeq)
+        seqRUVg <- RUVg(as.matrix(mtx.in), gene.constant, k=1, isLog = T)
+        mtx.combat <- seqRUVg$normalizedCounts
+    } else {
+        mtx.combat <- mtx.in
+    }
+    
     
     # topN <- 100
     list.cell.genes <- list()
@@ -547,6 +547,10 @@
         res.limma.ref <- res.limma.ref[res.limma.ref$logFC > 0,]
         bool.cell <- c()
         genes.ref <- row.names(res.limma.ref[(res.limma.ref$P.Value < 0.1),])
+        if (length(genes.ref) < (2*topN)) {
+            res.limma.ref <- res.limma.ref[order(res.limma.ref$P.Value),]
+            genes.ref <- row.names(res.limma.ref)[1:(2*topN)]
+        }
         use.genes <- intersect(genes.high, genes.ref)
         
         # diff in Atlas
@@ -557,100 +561,8 @@
         res.limma.MCA <- res.limma.MCA[res.limma.MCA$logFC > 0,]
         res.limma.MCA <- res.limma.MCA[order(res.limma.MCA$P.Value),]
         
-        genes.diff <- row.names(res.limma.high)[1:topN]
+        genes.diff <- row.names(res.limma.MCA)[1:topN]
         
-        list.cell.genes[[cell]] <- genes.diff
-        
-    }
-    
-    out <- list()
-    out[['list.cell.genes']] <- list.cell.genes
-    out[['exp_ref_mat']] <- exp_ref_mat
-    return(out)
-    
-}
-
-
-.find_markers_auto <- function(exp_ref_mat, type_ref = 'count', 
-                               out.group = 'MCA', topN = NULL) {
-    library(parallel, verbose = F)
-    library(Seurat, verbose = F)
-    # check parameters
-    if (!is.null(topN)) {
-        topN <- topN
-    } else {
-        stop('Error in finding markers: provide incorrect parameters')
-    }
-    
-    # transform count to fpm
-    if (type_ref == 'count') {
-        seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
-        seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
-                                    scale.factor = 1e6, verbose = F)
-        exp_ref_mat <- as.matrix(seurat.Ref@assays$RNA@data)
-    }
-    if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
-        exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
-    }
-    
-    ###### regard a outgroup (e.g. MCA/HCA) as reference of DEG
-    seurat.MCA <- .imoprt_outgroup(out.group)
-    fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
-    
-    # overlap genes
-    fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
-    out.overlap <- .get_overlap_genes(fpm.MCA, exp_ref_mat)
-    fpm.MCA <- as.matrix(out.overlap$exp_sc_mat)
-    exp_ref_mat <- as.matrix(out.overlap$exp_ref_mat)
-    # print('Number of overlapped genes:')
-    # print(nrow(exp_ref_mat))
-    
-    cell.MCA <- dimnames(fpm.MCA)[[2]]
-    cell.ref <- dimnames(exp_ref_mat)[[2]]
-    # scale
-    mtx.in <- cbind(fpm.MCA, exp_ref_mat)
-    names.mix <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
-    dimnames(mtx.in)[[2]] <- names.mix
-    seurat.mix <- CreateSeuratObject(mtx.in)
-    seurat.mix@assays$RNA@data <- mtx.in
-    seurat.mix <- ScaleData(seurat.mix, verbose = F)
-    mtx.combat <- seurat.mix@assays$RNA@scale.data
-
-    # cutoff.fc <- 1.5
-    # cutoff.pval <- 0.05
-    # topN <- 100
-    # cutoff.fc <- NULL
-    # cutoff.pval <- NULL
-    list.cell.genes <- list()
-    for (i in 1:length(cell.ref)) {
-        cell <- cell.ref[i]
-        vec.cell <- mtx.combat[, paste0('Ref.', cell)]
-        vec.cell.high <- vec.cell[vec.cell > quantile(vec.cell, 0.85)]
-        vec.ref <- exp_ref_mat[, cell]
-        vec.ref.high <- vec.ref[vec.ref > quantile(vec.ref, 0.85)]
-        # high expression genes
-        genes.high <- intersect(names(vec.cell.high), names(vec.ref.high))
-        # diff in reference
-        cells <- c(setdiff(cell.ref, cell), cell)
-        bool.cell <- cells
-        bool.cell[bool.cell != cell] <- '1'
-        bool.cell[bool.cell == cell] <- '2'
-        res.limma.ref <- .getDEgeneF(exp_ref_mat[, cells], bool.cell)
-        bool.cell <- c()
-        genes.ref <-
-            row.names(res.limma.ref[((res.limma.ref$P.Value < 0.1) &
-                                         (res.limma.ref$logFC > 0.5)),])
-        use.genes <- intersect(genes.high, genes.ref)
-        
-        mtx.combat.use <- mtx.combat[, names.mix != paste0('Ref.', cell)]
-        mtx.limma <- cbind(mtx.combat.use, vec.cell)
-        bool.cell <- as.factor(c(rep('1', dim(mtx.combat.use)[2]), '2'))
-        res.limma <- .getDEgeneF(mtx.limma, bool.cell)
-        res.limma.high <- res.limma[use.genes,]
-        res.limma.high <- res.limma.high[res.limma.high$logFC > 0,]
-        res.limma.high <- res.limma.high[order(res.limma.high$P.Value),]
-        
-        genes.diff <- row.names(res.limma.high)[1:topN]
         list.cell.genes[[cell]] <- genes.diff
         
     }
@@ -721,7 +633,9 @@
             FindVariableFeatures(sub.seurat, selection.method = "disp",
                                  nfeatures = 1000, verbose = F)
         # print('1')
-        sub.seurat <- ScaleData(sub.seurat, verbose = F)
+        sub.seurat <- ScaleData(sub.seurat, 
+                                features = VariableFeatures(sub.seurat), 
+                                verbose = F)
         # print(head(sub.seurat@assays$RNA@var.features))
         # print('2')
         
@@ -768,6 +682,9 @@
         
     }
     # num.cpu <- floor(length(cluster.ids) / 10)
+    
+    # split dataset
+    cl.input <- list()
     cl <- makeCluster(CPU, outfile = '')
     clusterExport(cl, '.generate_ref')
     clusterEvalQ(cl, library(Seurat))
@@ -819,7 +736,7 @@
             alternative = 'less',
             digits.rank = 7
         )
-    pvalue <- out.test$p.value
+    pvalue <- max(out.test$p.value, 1e-200)
     gc()
     return(data.frame(pvalue = pvalue, row.names = barcode))
     
@@ -853,6 +770,7 @@
     meta.tag <- merge(df.tag, df.pval, by = 'row.names')
     row.names(meta.tag) <- meta.tag$Row.names
     meta.tag$Row.names <- NULL
+    meta.tag$log10Pval <- -log10(meta.tag$pvalue)
     
     gc()
     
@@ -861,15 +779,84 @@
 }
 
 
+.cutoff_GMM <- function(df.tags.in, base.cutoff = 5, opt.strict = T) {
+    library(mclust, verbose = F)
+    cells <- unique(df.tags.in$scRef.tag)
+    vec.cutoff <- c()
+    for (i in 1:length(cells)) {
+        cell <- cells[i]
+        print(cell)
+        df.sub <- df.tags.in[df.tags.in$scRef.tag == cell, ]
+        model <- densityMclust(df.sub$log10Pval, G = min(5, nrow(df.sub)-1), verbose = F)
+        cluster.mean <- model$parameters$mean
+        names(cluster.mean) <- as.character(1:length(cluster.mean))
+        cluster.sd <- sqrt(model$parameters$variance$sigmasq)
+        if (length(cluster.sd) == 1) {
+            cluster.sd <- rep(sqrt(model$parameters$variance$sigmasq), length(cluster.mean))
+        }
+        names(cluster.sd) <- names(cluster.mean)
+        all.clusters <- names(cluster.mean)
+        cluster.unknown <- names(cluster.mean[cluster.mean < base.cutoff])
+        if (length(cluster.unknown) > 0) {
+            unknown.right <- cluster.unknown[length(cluster.unknown)]
+            cutoff.unknown <- 
+                cluster.mean[unknown.right] + 3 * cluster.sd[unknown.right]
+            for (cluster in setdiff(all.clusters, cluster.unknown)) {
+                sub.mean <- cluster.mean[cluster]
+                if (sub.mean < cutoff.unknown) {
+                    cluster.unknown <- c(cluster.unknown, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+        cluster.known <- setdiff(all.clusters, cluster.unknown)
+        cluster.final <- c(cluster.known[length(cluster.known)])
+        if (length(cluster.known) > 1) {
+            for (j in rev(1:(length(cluster.known) - 1))) {
+                cluster <- cluster.known[j]
+                logp.j.right <- cluster.mean[cluster] + max(3 * cluster.sd[cluster] ,10)
+                known.left <- cluster.mean[cluster.known[j+1]]
+                # print(cluster)
+                # print(logp.j.right)
+                # print(known.left)
+                if (logp.j.right >= known.left) {
+                    cluster.final <- c(cluster.final, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+        cluster.known <- rev(cluster.final)
+        if (length(cluster.known) == 0) {
+            vec.cutoff <- c(vec.cutoff, 20)
+            next()
+        }
+        if (opt.strict) {
+            sub.cutoff <- cluster.mean[cluster.known[1]]
+        } else {
+            df.sub$classification <- model$classification
+            sub.cutoff <- 
+                min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
+        }
+        sub.cutoff <- max(sub.cutoff, base.cutoff)
+        sub.cutoff <- min(30, sub.cutoff)
+        vec.cutoff <- c(vec.cutoff, sub.cutoff)
+    }
+    names(vec.cutoff) <- cells
+    return(vec.cutoff)
+}
+
+
 SCREF <- function(exp_sc_mat, exp_ref_mat, 
-                  identify_unassigned = T,
-                  type_ref = 'count', out.group = 'MCA', topN = 100, 
-                  cluster.num.pc =50, cluster.resolution = 10, 
+                  identify_unassigned = T, corr_use_HVGene = T,
+                  type_ref = 'count', out.group = 'MCA', use.RUVseq = T, topN = 100, 
+                  cluster.num.pc =50, cluster.resolution = 3, 
                   cluster.speed = T, cluster.cell = 5,
                   method1 = 'kendall', method2 = 'multinomial', 
                   cutoff.1 = 'default', cutoff.2 = 'default',
                   threshold.recall = 0.1,
-                  min_cell = 1, CPU = 4) {
+                  min_cell = 5, CPU = 4) {
     library(parallel, verbose = F)
     # check parameters
     if (!type_ref %in% c('count', 'fpkm', 'tpm', 'rpkm', 'bulk')) {
@@ -886,11 +873,14 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
     print('Number of overlapped genes:')
     print(nrow(exp_sc_mat))
     
+    seurat.out.group <- .imoprt_outgroup(out.group = out.group, use.RUVseq = use.RUVseq)
+    
     if (identify_unassigned) {
         # find markers of cell types in reference
         print('Find marker genes of cell types in reference:')
         out.markers <-
-            .find_markers_auto(exp_ref_mat, type_ref = type_ref, topN = topN)
+            .find_markers_auto(exp_ref_mat, seurat.out.group, 
+                                 type_ref = type_ref, use.RUVseq = use.RUVseq, topN = topN)
         list.cell.genes <- out.markers[['list.cell.genes']]
         genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
         
@@ -931,43 +921,32 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
 
     print('First-round annotation:')
     print(method1)
+    if (corr_use_HVGene) {
+        HVG <- .get_high_variance_genes(exp_ref_mat, type_ref = type_ref)
+        similarity.in <- df.exp.merge[HVG, ]
+        ref.in <- exp_ref_mat[HVG, ]
+    }
     if (method1 != 'multinomial') {
-        out1 <- .get_cor(df.exp.merge, exp_ref_mat, method = method1, CPU = CPU)
+        out1 <- .get_cor(similarity.in, ref.in, method = method1, CPU = CPU)
     } else {
-        out1 <- .get_log_p_sc_given_ref(df.exp.merge, exp_ref_mat, CPU = CPU)
+        out1 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
     }
     
     gc()
     
     tag1 <- .get_tag_max(out1)
-    # df.tag.1 <- as.data.frame(tag1)
-    # row.names(df.tag.1) <- df.tag.1$cell_id
-    # df.tag.1$cell_id <- NULL
-    # names(df.tag.1) <- 'scRef.tag'
-    # df.view.1 <- merge(df.tag.1, label.filter, by = 'row.names')
-    
+
     if (identify_unassigned) {
         print('Build local reference')
         df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
         gc()
         cell_ids <- dimnames(df.exp.merge)[[2]]
         df.tags1 <- df.tags1[cell_ids, ]
-        df.tags1$log10Pval <- -log10(df.tags1$pvalue)
         # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
-        
-        # df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
-        # row.names(df.view.dict) <- df.view.dict$Row.names
-        # df.view.dict$Row.names <- NULL
-        # df.tags1$cluster.merge.id <- row.names(df.tags1)
-        # df.view.dict1 <- merge(df.view.dict, df.tags1, by = 'cluster.merge.id')
-        
+
         # select cutoff.1 automatitically
         if (cutoff.1 == 'default') {
-            tag.base <- data.frame(cell_id = names(list.cell.genes),
-                                   tag = names(list.cell.genes))
-            df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
-            df.base$cutoff <- -log10(df.base$pvalue) * 0.2
-            df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
+            df.cutoff.1 <- .cutoff_GMM(df.tags1)
             print('Default cutoff: ')
             print(df.cutoff.1)
             
@@ -998,16 +977,22 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
     if (identify_unassigned) {
         # find local marker genes
         print('find local marker genes')
-        out.markers <- .find_markers_auto(LocalRef, topN = 100)
+        out.markers <- .find_markers_auto(LocalRef, seurat.out.group, 
+                                          use.RUVseq = use.RUVseq, topN = topN)
         local.cell.genes <- out.markers[['list.cell.genes']]
     }
     
     print('Second-round annotation:')
     print(method2)
+    if (corr_use_HVGene) {
+        HVG <- .get_high_variance_genes(LocalRef)
+        similarity.in <- df.exp.merge[HVG, ]
+        ref.in <- LocalRef[HVG, ]
+    }
     if (method2 != 'multinomial') {
-        out2 <- .get_cor(df.exp.merge, LocalRef, method = method2, CPU = CPU)
+        out2 <- .get_cor(similarity.in, ref.in, method = method2, CPU = CPU)
     } else {
-        out2 <- .get_log_p_sc_given_ref(df.exp.merge, LocalRef, CPU = CPU)
+        out2 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
     }
     tag2 <- .get_tag_max(out2)
     gc()
@@ -1016,16 +1001,14 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
         gc()
         df.tags2 <- df.tags2[dimnames(df.exp.merge)[[2]], ]
-        # df.tags2.view <- merge(df.tags2, label.filter, by = 'row.names')
-        # row.names(df.tags2.view) <- df.tags2.view$Row.names
-        # df.tags2.view$Row.names <- NULL
-        # names(df.tags2.view) <- c('scRef2.tag', 'pvalue', 'qvalue', 'label')
-        
+
         print('Combine reference and local result:')
         # concat reference pval and local pval
         pvalue1 <- df.tags1[, c('scRef.tag', 'pvalue')]
         names(pvalue1) <- c('scRef.tag.1', 'pvalue.1')
-        pvalue2 <- df.tags2
+        del.cells <- setdiff(colnames(exp_ref_mat), colnames(LocalRef))
+        pvalue1$pvalue.1[pvalue1$scRef.tag.1 %in% del.cells] <- 1
+        pvalue2 <- df.tags2[, c('scRef.tag', 'pvalue')]
         names(pvalue2) <- c('scRef.tag.2', 'pvalue.2')
         pvalue <- merge(pvalue1, pvalue2, by = 'row.names')
         row.names(pvalue) <- pvalue$Row.names
@@ -1045,9 +1028,10 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             })
         tag.final <-
             data.frame(
-                scRef.tag.12 = tag.final,
+                scRef.tag = tag.final,
                 pvalue = pval.final,
-                row.names = dimnames(mtx.tag)[[1]]
+                row.names = dimnames(mtx.tag)[[1]],
+                stringsAsFactors = F
             )
         
         # modify tags and combine pval
@@ -1067,71 +1051,10 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         
         # select cutoff.2 automatitically
         if (cutoff.2 == 'default') {
-            tag.base.local <- data.frame(cell_id = names(local.cell.genes),
-                                   tag = names(local.cell.genes))
-            df.base.local <- .confirm_label(LocalRef, local.cell.genes, 
-                                            tag.base.local, CPU = 2)
-            df.base.local$cutoff <- -log10(df.base.local$pvalue) * 0.5
-            df.base.local <- as.matrix(df.base.local[,c("pvalue", "cutoff")])[,c("cutoff")]
-            
-            df.tag.cluster <- merge(df.tags, df.cluster, by = 'row.names')
-            cluster.ids <- unique(as.character(df.cluster$cluster.id))
-            meta.cluster <- data.frame(stringsAsFactors = F)
-            for (cluster.id in cluster.ids) {
-                sub.tag.cluster <- df.tag.cluster[df.tag.cluster$cluster.id == cluster.id,]
-                # mean.log10Pval <- mean(sub.tag.cluster$log10Pval)
-                # sd.log10Pval <- sd(sub.tag.cluster$log10Pval)
-                table.tag <- table(sub.tag.cluster$scRef.tag.12)
-                table.tag <- table.tag[order(table.tag, decreasing = T)]
-                main.cell <- names(table.tag[1])
-                percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
-                main.cell.log10Pval <-
-                    sub.tag.cluster[sub.tag.cluster$scRef.tag.12 == main.cell, 'log10Pval']
-                quartile.range <-
-                    quantile(main.cell.log10Pval, 0.75) - quantile(main.cell.log10Pval, 0.25)
-                median.log10Pval <- median(main.cell.log10Pval)
-                down.quartile <- quantile(main.cell.log10Pval, 0.25)
-                max.log10Pval <- max(main.cell.log10Pval)
-                uplimit <- min(max.log10Pval, median.log10Pval + quartile.range)
-                min.log10Pval <- min(main.cell.log10Pval)
-                downlimit <- max(min.log10Pval, median.log10Pval - 1.5*quartile.range)
-                
-                meta.cluster <- rbind(
-                    meta.cluster,
-                    data.frame(
-                        cluster.id = cluster.id,
-                        main.cell = main.cell,
-                        percent.main.cell = percent.main.cell,
-                        median.log10Pval = median.log10Pval,
-                        quartile.range = quartile.range,
-                        max.log10Pval = max.log10Pval,
-                        uplimit = uplimit,
-                        min.log10Pval = min.log10Pval,
-                        down.quartile = down.quartile,
-                        downlimit = downlimit,
-                        stringsAsFactors = F
-                    )
-                )
-            }
-            main.cells <- unique(meta.cluster$main.cell)
-            df.cutoff.2 <- data.frame()
-            for (main.cell in main.cells) {
-                cell.cutoff <- df.base.local[main.cell]
-                sub.cluster <- meta.cluster[(meta.cluster$main.cell == main.cell), ]
-                set.downlimit <- sub.cluster[(sub.cluster$median.log10Pval > cell.cutoff), 'downlimit']
-                if (length(set.downlimit) == 0) {
-                    set.downlimit <- sub.cluster[
-                        (sub.cluster$median.log10Pval == max(sub.cluster$median.log10Pval)), 'downlimit']
-                }
-                one.min <- min(c(set.downlimit, cell.cutoff))
-                df.cutoff.2 <- rbind(df.cutoff.2,
-                                     data.frame(cutoff = one.min,
-                                                row.names = main.cell))
-            }
-            df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
+            df.cutoff.2 <- .cutoff_GMM(df.tags, opt.strict = F)
             print('Default cutoff: ')
             print(df.cutoff.2)
-            df.tags$scRef.tag.12 <- as.character(df.tags$scRef.tag.12)
+            df.tags$scRef.tag.12 <- as.character(df.tags$scRef.tag)
             df.tags$scRef.tag <- df.tags$scRef.tag.12
             for (cell in names(df.cutoff.2)) {
                 sub.cutoff <- df.cutoff.2[cell]
@@ -1163,26 +1086,38 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         # recall Unassigned
         df.tags$scRef.tag.pre.recall <- df.tags$scRef.tag
         cluster.ids <- unique(df.cluster$cluster.id)
-        info.Unassigned <- data.frame(stringsAsFactors = F)
+        info.cluster <- data.frame(stringsAsFactors = F)
         for (cluster.id in cluster.ids) {
-            sub.tags <- df.tags[df.tags$cluster.id == cluster.id,]
-            percent.Unassigned <-
-                sum(sub.tags$scRef.tag.pre.recall == 'Unassigned') / nrow(sub.tags)
+            sub.tag.cluster <- df.tags[df.tags$cluster.id == cluster.id,]
+            table.tag <- table(sub.tag.cluster$scRef.tag.12)
+            table.tag <- table.tag[order(table.tag, decreasing = T)]
+            main.cell <- names(table.tag[1])
+            percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
+            num.Unassigned <- sum(sub.tag.cluster$scRef.tag.pre.recall == 'Unassigned')
+            percent.Unassigned <- num.Unassigned / nrow(sub.tag.cluster)
             if (percent.Unassigned < threshold.recall) {
-                df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag'] <-
-                    df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag.12']
+                if (percent.main.cell > (1- threshold.recall - 0.05)) {
+                    df.tags[(df.tags$cluster.id == cluster.id) & 
+                                (df.tags$scRef.tag == 'Unassigned'), 'scRef.tag'] <-
+                        rep(main.cell, num.Unassigned)
+                } else {
+                    df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag'] <-
+                        df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag.12']
+                }
+                
             }
-            info.Unassigned <- rbind(
-                info.Unassigned,
+            info.cluster <- rbind(
+                info.cluster,
                 data.frame(
                     cluster.id = cluster.id,
                     percent.Unassigned = percent.Unassigned,
+                    main.cell = main.cell,
+                    percent.main.cell = percent.main.cell,
                     stringsAsFactors = F
                 )
             )
         }
-        meta.cluster <- merge(meta.cluster, info.Unassigned, by = 'cluster.id')
-        
+
         df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
         cell_ids <- colnames(exp_sc_mat)
         df.combine <- df.combine[cell_ids, ]
@@ -1217,7 +1152,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         output$pvalue1 <- df.tags1
         output$pvalue2 <- df.tags2
         output$combine.out <- df.tags
-        output$info.cluster <- meta.cluster
+        output$info.cluster <- info.cluster
         if (cluster.speed) {
             output$dict.cluster <- df.dict
         }

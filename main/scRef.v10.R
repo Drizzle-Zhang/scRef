@@ -557,7 +557,7 @@
         res.limma.MCA <- res.limma.MCA[res.limma.MCA$logFC > 0,]
         res.limma.MCA <- res.limma.MCA[order(res.limma.MCA$P.Value),]
         
-        genes.diff <- row.names(res.limma.high)[1:topN]
+        genes.diff <- row.names(res.limma.MCA)[1:topN]
         
         list.cell.genes[[cell]] <- genes.diff
         
@@ -853,6 +853,7 @@
     meta.tag <- merge(df.tag, df.pval, by = 'row.names')
     row.names(meta.tag) <- meta.tag$Row.names
     meta.tag$Row.names <- NULL
+    meta.tag$log10Pval <- -log10(meta.tag$pvalue)
     
     gc()
     
@@ -861,10 +862,129 @@
 }
 
 
+.cutoff_GMM.bak <- function(df.tags.in, base.cutoff = 5, opt.strict = T) {
+    library(mclust, verbose = F)
+    cells <- unique(df.tags.in$scRef.tag)
+    vec.cutoff <- c()
+    for (i in 1:length(cells)) {
+        cell <- cells[i]
+        df.sub <- df.tags1[df.tags1$scRef.tag == cell, ]
+        model <- densityMclust(df.sub$log10Pval, verbose = F)
+        cluster.mean <- model$parameters$mean
+        names(cluster.mean) <- as.character(1:length(cluster.mean))
+        if (length(cluster.mean) == 2) {
+            cluster.sd <- rep(sqrt(model$parameters$variance$sigmasq), 2)
+        } else {
+            cluster.sd <- sqrt(model$parameters$variance$sigmasq)
+        }
+        names(cluster.sd) <- names(cluster.mean)
+        all.clusters <- names(cluster.mean)
+        cluster.unknown <- names(cluster.mean[cluster.mean < base.cutoff])
+        unknown.right <- cluster.unknown[length(cluster.unknown)]
+        cutoff.unknown <- 
+            cluster.mean[unknown.right] + 3 * cluster.sd[unknown.right]
+        if (length(cluster.unknown) > 0) {
+            for (cluster in setdiff(all.clusters, cluster.unknown)) {
+                sub.mean <- cluster.mean[cluster]
+                if (sub.mean < cutoff.unknown) {
+                    cluster.unknown <- c(cluster.unknown, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+       cluster.known <- setdiff(all.clusters, cluster.unknown)
+        if (length(cluster.known) == 0) {
+            vec.cutoff <- c(vec.cutoff, 20)
+            next()
+        }
+        if (opt.strict) {
+            sub.cutoff <- cluster.mean[cluster.known[1]]
+        } else {
+            df.sub$classification <- model$classification
+            sub.cutoff <- 
+                min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
+        }
+        vec.cutoff <- c(vec.cutoff, sub.cutoff)
+    }
+    names(vec.cutoff) <- cells
+    return(vec.cutoff)
+}
+
+
+.cutoff_GMM <- function(df.tags.in, base.cutoff = 5, opt.strict = T) {
+    library(mclust, verbose = F)
+    cells <- unique(df.tags.in$scRef.tag)
+    vec.cutoff <- c()
+    for (i in 1:length(cells)) {
+        cell <- cells[i]
+        print(cell)
+        df.sub <- df.tags.in[df.tags.in$scRef.tag == cell, ]
+        model <- densityMclust(df.sub$log10Pval, G = 5, verbose = F)
+        cluster.mean <- model$parameters$mean
+        names(cluster.mean) <- as.character(1:length(cluster.mean))
+        cluster.sd <- sqrt(model$parameters$variance$sigmasq)
+        if (length(cluster.sd) == 1) {
+            cluster.sd <- rep(sqrt(model$parameters$variance$sigmasq), length(cluster.mean))
+        }
+        names(cluster.sd) <- names(cluster.mean)
+        all.clusters <- names(cluster.mean)
+        cluster.unknown <- names(cluster.mean[cluster.mean < base.cutoff])
+        if (length(cluster.unknown) > 0) {
+            unknown.right <- cluster.unknown[length(cluster.unknown)]
+            cutoff.unknown <- 
+                cluster.mean[unknown.right] + 3 * cluster.sd[unknown.right]
+            for (cluster in setdiff(all.clusters, cluster.unknown)) {
+                sub.mean <- cluster.mean[cluster]
+                if (sub.mean < cutoff.unknown) {
+                    cluster.unknown <- c(cluster.unknown, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+        cluster.known <- setdiff(all.clusters, cluster.unknown)
+        cluster.final <- c(cluster.known[length(cluster.known)])
+        if (length(cluster.known) > 1) {
+            for (j in rev(1:(length(cluster.known) - 1))) {
+                cluster <- cluster.known[j]
+                logp.j.right <- cluster.mean[cluster] + max(3 * cluster.sd[cluster] ,10)
+                known.left <- cluster.mean[cluster.known[j+1]]
+                # print(cluster)
+                # print(logp.j.right)
+                # print(known.left)
+                if (logp.j.right >= known.left) {
+                    cluster.final <- c(cluster.final, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+        cluster.known <- rev(cluster.final)
+        if (length(cluster.known) == 0) {
+            vec.cutoff <- c(vec.cutoff, 20)
+            next()
+        }
+        if (opt.strict) {
+            sub.cutoff <- cluster.mean[cluster.known[1]]
+        } else {
+            df.sub$classification <- model$classification
+            sub.cutoff <- 
+                min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
+        }
+        sub.cutoff <- max(sub.cutoff, base.cutoff)
+        sub.cutoff <- min(30, sub.cutoff)
+        vec.cutoff <- c(vec.cutoff, sub.cutoff)
+    }
+    names(vec.cutoff) <- cells
+    return(vec.cutoff)
+}
+
+
 SCREF <- function(exp_sc_mat, exp_ref_mat, 
                   identify_unassigned = T,
                   type_ref = 'count', out.group = 'MCA', topN = 100, 
-                  cluster.num.pc =50, cluster.resolution = 10, 
+                  cluster.num.pc =50, cluster.resolution = 3, 
                   cluster.speed = T, cluster.cell = 5,
                   method1 = 'kendall', method2 = 'multinomial', 
                   cutoff.1 = 'default', cutoff.2 = 'default',
@@ -890,7 +1010,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         # find markers of cell types in reference
         print('Find marker genes of cell types in reference:')
         out.markers <-
-            .find_markers_auto(exp_ref_mat, type_ref = type_ref, topN = topN)
+            .find_markers_RUVseq(exp_ref_mat, type_ref = type_ref, topN = topN)
         list.cell.genes <- out.markers[['list.cell.genes']]
         genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
         
@@ -952,7 +1072,6 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         gc()
         cell_ids <- dimnames(df.exp.merge)[[2]]
         df.tags1 <- df.tags1[cell_ids, ]
-        df.tags1$log10Pval <- -log10(df.tags1$pvalue)
         # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
         
         # df.view.dict <- merge(df.dict, label.filter, by = 'row.names')
@@ -963,11 +1082,16 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         
         # select cutoff.1 automatitically
         if (cutoff.1 == 'default') {
-            tag.base <- data.frame(cell_id = names(list.cell.genes),
-                                   tag = names(list.cell.genes))
-            df.base <- .confirm_label(exp_ref_mat, list.cell.genes, tag.base, CPU = 2)
-            df.base$cutoff <- -log10(df.base$pvalue) * 0.2
-            df.cutoff.1 <- as.matrix(df.base[,c("pvalue", "cutoff")])[,c("cutoff")]
+            # df.test <- data.frame(stringsAsFactors = F)
+            # ref_cells <- names(list.cell.genes)
+            # for (cell in ref_cells) {
+            #     tag.base <- data.frame(cell_id = ref_cells,
+            #                            tag = rep(cell, length(ref_cells)))
+            #     df.base <- .confirm_label(exp_ref_mat[,ref_cells], list.cell.genes, tag.base, CPU = 2)
+            #     df.base$cutoff <- -log10(df.base$pvalue)
+            #     df.test <- rbind(df.test, df.base)
+            # }
+            df.cutoff.1 <- .cutoff_GMM(df.tags1)
             print('Default cutoff: ')
             print(df.cutoff.1)
             
@@ -998,7 +1122,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
     if (identify_unassigned) {
         # find local marker genes
         print('find local marker genes')
-        out.markers <- .find_markers_auto(LocalRef, topN = 100)
+        out.markers <- .find_markers_RUVseq(LocalRef, topN = 100)
         local.cell.genes <- out.markers[['list.cell.genes']]
     }
     
@@ -1045,9 +1169,10 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             })
         tag.final <-
             data.frame(
-                scRef.tag.12 = tag.final,
+                scRef.tag = tag.final,
                 pvalue = pval.final,
-                row.names = dimnames(mtx.tag)[[1]]
+                row.names = dimnames(mtx.tag)[[1]],
+                stringsAsFactors = F
             )
         
         # modify tags and combine pval
@@ -1067,71 +1192,10 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         
         # select cutoff.2 automatitically
         if (cutoff.2 == 'default') {
-            tag.base.local <- data.frame(cell_id = names(local.cell.genes),
-                                   tag = names(local.cell.genes))
-            df.base.local <- .confirm_label(LocalRef, local.cell.genes, 
-                                            tag.base.local, CPU = 2)
-            df.base.local$cutoff <- -log10(df.base.local$pvalue) * 0.5
-            df.base.local <- as.matrix(df.base.local[,c("pvalue", "cutoff")])[,c("cutoff")]
-            
-            df.tag.cluster <- merge(df.tags, df.cluster, by = 'row.names')
-            cluster.ids <- unique(as.character(df.cluster$cluster.id))
-            meta.cluster <- data.frame(stringsAsFactors = F)
-            for (cluster.id in cluster.ids) {
-                sub.tag.cluster <- df.tag.cluster[df.tag.cluster$cluster.id == cluster.id,]
-                # mean.log10Pval <- mean(sub.tag.cluster$log10Pval)
-                # sd.log10Pval <- sd(sub.tag.cluster$log10Pval)
-                table.tag <- table(sub.tag.cluster$scRef.tag.12)
-                table.tag <- table.tag[order(table.tag, decreasing = T)]
-                main.cell <- names(table.tag[1])
-                percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
-                main.cell.log10Pval <-
-                    sub.tag.cluster[sub.tag.cluster$scRef.tag.12 == main.cell, 'log10Pval']
-                quartile.range <-
-                    quantile(main.cell.log10Pval, 0.75) - quantile(main.cell.log10Pval, 0.25)
-                median.log10Pval <- median(main.cell.log10Pval)
-                down.quartile <- quantile(main.cell.log10Pval, 0.25)
-                max.log10Pval <- max(main.cell.log10Pval)
-                uplimit <- min(max.log10Pval, median.log10Pval + quartile.range)
-                min.log10Pval <- min(main.cell.log10Pval)
-                downlimit <- max(min.log10Pval, median.log10Pval - 1.5*quartile.range)
-                
-                meta.cluster <- rbind(
-                    meta.cluster,
-                    data.frame(
-                        cluster.id = cluster.id,
-                        main.cell = main.cell,
-                        percent.main.cell = percent.main.cell,
-                        median.log10Pval = median.log10Pval,
-                        quartile.range = quartile.range,
-                        max.log10Pval = max.log10Pval,
-                        uplimit = uplimit,
-                        min.log10Pval = min.log10Pval,
-                        down.quartile = down.quartile,
-                        downlimit = downlimit,
-                        stringsAsFactors = F
-                    )
-                )
-            }
-            main.cells <- unique(meta.cluster$main.cell)
-            df.cutoff.2 <- data.frame()
-            for (main.cell in main.cells) {
-                cell.cutoff <- df.base.local[main.cell]
-                sub.cluster <- meta.cluster[(meta.cluster$main.cell == main.cell), ]
-                set.downlimit <- sub.cluster[(sub.cluster$median.log10Pval > cell.cutoff), 'downlimit']
-                if (length(set.downlimit) == 0) {
-                    set.downlimit <- sub.cluster[
-                        (sub.cluster$median.log10Pval == max(sub.cluster$median.log10Pval)), 'downlimit']
-                }
-                one.min <- min(c(set.downlimit, cell.cutoff))
-                df.cutoff.2 <- rbind(df.cutoff.2,
-                                     data.frame(cutoff = one.min,
-                                                row.names = main.cell))
-            }
-            df.cutoff.2 <- as.matrix(df.cutoff.2)[, 'cutoff']
+            df.cutoff.2 <- .cutoff_GMM(df.tags, opt.strict = F)
             print('Default cutoff: ')
             print(df.cutoff.2)
-            df.tags$scRef.tag.12 <- as.character(df.tags$scRef.tag.12)
+            df.tags$scRef.tag.12 <- as.character(df.tags$scRef.tag)
             df.tags$scRef.tag <- df.tags$scRef.tag.12
             for (cell in names(df.cutoff.2)) {
                 sub.cutoff <- df.cutoff.2[cell]
@@ -1160,29 +1224,34 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
             df.tags <- df.tags.merge
         }
         
-        # recall Unassigned
-        df.tags$scRef.tag.pre.recall <- df.tags$scRef.tag
-        cluster.ids <- unique(df.cluster$cluster.id)
-        info.Unassigned <- data.frame(stringsAsFactors = F)
-        for (cluster.id in cluster.ids) {
-            sub.tags <- df.tags[df.tags$cluster.id == cluster.id,]
-            percent.Unassigned <-
-                sum(sub.tags$scRef.tag.pre.recall == 'Unassigned') / nrow(sub.tags)
-            if (percent.Unassigned < threshold.recall) {
-                df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag'] <-
-                    df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag.12']
-            }
-            info.Unassigned <- rbind(
-                info.Unassigned,
-                data.frame(
-                    cluster.id = cluster.id,
-                    percent.Unassigned = percent.Unassigned,
-                    stringsAsFactors = F
-                )
-            )
-        }
-        meta.cluster <- merge(meta.cluster, info.Unassigned, by = 'cluster.id')
-        
+        # # recall Unassigned
+        # df.tags$scRef.tag.pre.recall <- df.tags$scRef.tag
+        # cluster.ids <- unique(df.cluster$cluster.id)
+        # info.Unassigned <- data.frame(stringsAsFactors = F)
+        # for (cluster.id in cluster.ids) {
+        #     sub.tag.cluster <- df.tags[df.tags$cluster.id == cluster.id,]
+        #     table.tag <- table(sub.tag.cluster$scRef.tag.12)
+        #     table.tag <- table.tag[order(table.tag, decreasing = T)]
+        #     main.cell <- names(table.tag[1])
+        #     percent.main.cell <- table.tag[1] / dim(sub.tag.cluster)[1]
+        #     percent.Unassigned <-
+        #         sum(sub.tag.cluster$scRef.tag.pre.recall == 'Unassigned') / nrow(sub.tag.cluster)
+        #     if (percent.Unassigned < threshold.recall) {
+        #         df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag'] <-
+        #             df.tags[df.tags$cluster.id == cluster.id, 'scRef.tag.12']
+        #     }
+        #     info.Unassigned <- rbind(
+        #         info.Unassigned,
+        #         data.frame(
+        #             cluster.id = cluster.id,
+        #             percent.Unassigned = percent.Unassigned,
+        #             main.cell = main.cell,
+        #             percent.main.cell = percent.main.cell,
+        #             stringsAsFactors = F
+        #         )
+        #     )
+        # }
+
         df.combine <- df.tags[, c("scRef.tag", "log10Pval")]
         cell_ids <- colnames(exp_sc_mat)
         df.combine <- df.combine[cell_ids, ]
@@ -1217,7 +1286,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
         output$pvalue1 <- df.tags1
         output$pvalue2 <- df.tags2
         output$combine.out <- df.tags
-        output$info.cluster <- meta.cluster
+        # output$info.cluster <- meta.cluster
         if (cluster.speed) {
             output$dict.cluster <- df.dict
         }

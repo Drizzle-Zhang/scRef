@@ -567,7 +567,7 @@
         FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:cluster.num.pc,
                       nn.eps = 0.5, verbose = F)
     seurat.unlabeled <-
-        FindClusters(seurat.unlabeled, cluster.resolution = 3, n.start = 20,
+        FindClusters(seurat.unlabeled, resolution = cluster.resolution, n.start = 20,
                      n.iter = 100, verbose = F)
     
     out.cluster <-
