@@ -229,7 +229,12 @@ Train_Labels <- list(ref.labels)
 names(Train_Labels[[1]]) <- colnames(ref.mtx)
 scID_output <- scid_multiclass(exp_sc_mat, ref.mtx, Train_Labels[[1]])
 pred.scID <- scID_output$labels
+saveRDS(pred.scID, 
+        file = paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata'))
 
+#############################################
+
+# evaluation
 #############################################
 
 

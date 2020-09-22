@@ -323,8 +323,8 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   load(CV_RDataPath)
   Labels <- as.vector(Labels[,col_Index])
   Data <- Data[Cells_to_Keep,]
-  print(dim(Data))
-  print(dim(Labels))
+  # print(dim(Data))
+  # print(length(Labels))
   
   Labels <- Labels[Cells_to_Keep]
   if(!is.null(GeneOrderPath) & !is.null (NumGenes)){
@@ -334,9 +334,9 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
   #############################################################################
   #                                scPred                                     #
   #############################################################################
-  library(scPred)
-  library(tidyverse)
-  library(SingleCellExperiment)
+  library("scPred")
+  library("Seurat")
+  library("magrittr")
   True_Labels_scPred <- list()
   Pred_Labels_scPred <- list()
   Training_Time_scPred <- list()
@@ -357,40 +357,55 @@ run_scPred<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
       sce_cpm_test <- apply(sce_counts_test, 2, function(x) (x/sum(x))*1000000)
       sce_metadata_test <- as.data.frame(colData(sce_test))
     }else{
-      sce <- SingleCellExperiment(list(normcounts = Data[,Train_Idx[[i]]]), 
-                                  colData = data.frame(cell_type1 = Labels[Train_Idx[[i]]]))
-      sce_counts <- normcounts(sce)
-      sce_cpm <- apply(sce_counts, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata <- as.data.frame(colData(sce))
-      
-      sce_test <- SingleCellExperiment(list(normcounts = Data[,Test_Idx[[i]]]), 
-                                       colData = data.frame(cell_type1 = Labels[Test_Idx[[i]]]))
-      sce_counts_test <- normcounts(sce_test)
-      sce_cpm_test <- apply(sce_counts_test, 2, function(x) (x/sum(x))*1000000)
-      sce_metadata_test <- as.data.frame(colData(sce_test))
+      reference <- CreateSeuratObject(counts = Data[,Train_Idx[[i]]])
+      reference@meta.data$cell_type <- Labels[Train_Idx[[i]]]
+      query <- CreateSeuratObject(counts = Data[,Test_Idx[[i]]])
+      # sce <- SingleCellExperiment(list(normcounts = Data[,Train_Idx[[i]]]), 
+      #                             colData = data.frame(cell_type1 = Labels[Train_Idx[[i]]]))
+      # sce_counts <- normcounts(sce)
+      # sce_cpm <- apply(sce_counts, 2, function(x) (x/sum(x))*1000000)
+      # sce_metadata <- as.data.frame(colData(sce))
+      # 
+      # sce_test <- SingleCellExperiment(list(normcounts = Data[,Test_Idx[[i]]]), 
+      #                                  colData = data.frame(cell_type1 = Labels[Test_Idx[[i]]]))
+      # sce_counts_test <- normcounts(sce_test)
+      # sce_cpm_test <- apply(sce_counts_test, 2, function(x) (x/sum(x))*1000000)
+      # sce_metadata_test <- as.data.frame(colData(sce_test))
     }
     
     
     # scPred Training    
     start_time <- Sys.time()
-    set.seed(1234)
-    scp <- eigenDecompose(sce_cpm)
-    scPred::metadata(scp) <- sce_metadata
-    scp <- getFeatureSpace(scp, pVar = 'cell_type1')
-    # plotEigen(scp, group = 'cell_type1')
-    scp <- trainModel(scp)
-    # plotTrainProbs(scp)
+    reference <- reference %>%
+      NormalizeData() %>%
+      FindVariableFeatures() %>%
+      ScaleData() %>%
+      RunPCA() %>%
+      RunUMAP(dims = 1:30)
+    reference <- getFeatureSpace(reference, "cell_type")
+    reference <- trainModel(reference)
+    # set.seed(1234)
+    # scp <- eigenDecompose(sce_cpm)
+    # scPred::metadata(scp) <- sce_metadata
+    # scp <- getFeatureSpace(scp, pVar = 'cell_type1')
+    # # plotEigen(scp, group = 'cell_type1')
+    # scp <- trainModel(scp)
+    # # plotTrainProbs(scp)
     end_time <- Sys.time()
     Training_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
     # scPred Prediction
     start_time <- Sys.time()
-    scp <- scPredict(scp,newData = sce_cpm_test)
+    # scp <- scPredict(scp,newData = sce_cpm_test)
+    query <- NormalizeData(query)
+    query <- scPredict(query, reference)
+    pred.scPred <- query@meta.data$scpred_prediction
     end_time <- Sys.time()
     Testing_Time_scPred[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))
     
     True_Labels_scPred[i] <- list(Labels[Test_Idx[[i]]])
-    Pred_Labels_scPred[i] <- list(getPredictions(scp)$predClass)
+    Pred_Labels_scPred[i] <- list(pred.scPred)
+    # Pred_Labels_scPred[i] <- list(getPredictions(scp)$predClass)
   }
   True_Labels_scPred <- as.vector(unlist(True_Labels_scPred))
   Pred_Labels_scPred <- as.vector(unlist(Pred_Labels_scPred))
@@ -529,15 +544,16 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   #############################################################################
   #                               scRef                                     #
   #############################################################################
-  source('/home/drizzle_zhang/my_git/scRef/main/scRef.v8.R')
+  # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
+  source('/home/zy/my_git/scRef/main/scRef.v12.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
 
   for (i in c(1:n_folds)) {
     train_data <- Data[,Train_Idx[[i]]]
-    train_label <- data.frame(cell_id = names(train_data), tag = Labels[Train_Idx[[i]]])
-    train_set <- .generate_ref(train_data, train_label)
+    train_label <- Labels[Train_Idx[[i]]]
+    # train_set <- .generate_ref(train_data, train_label)
     test_set <- Data[,Test_Idx[[i]]]
     if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
       start_time <- Sys.time()
@@ -552,9 +568,13 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       #               cluster.speed = T, cluster.cell = 3, min_cell = 3, CPU = 4)
       # scRef = SCREF(test_set, train_set, type_ref = 'count',
       #               cluster.speed = F, min_cell = 1, CPU = 4)
-      scRef = SCREF(test_set, train_set,
-                    identify_unassigned = F, CPU = 6)
-      label.scRef <- as.character(scRef$final.out$scRef.tag)
+      result.scref <- SCREF(test_set, train_data, train_label,
+                            type_ref = 'sc-counts', use.RUVseq = T, 
+                            cluster.speed = T, cluster.cell = 10,
+                            min_cell = 10, CPU = 6)
+      # scRef = SCREF(test_set, train_set,
+      #               identify_unassigned = F, CPU = 6)
+      label.scRef <- as.character(result.scref$final.out$scRef.tag)
       end_time <- Sys.time()
     }
     Total_Time_scRef[i] <- as.numeric(difftime(end_time,start_time,units = 'secs'))

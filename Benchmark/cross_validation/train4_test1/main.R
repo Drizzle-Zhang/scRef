@@ -1,27 +1,45 @@
-# setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train4_test1')
-# source('./Cross_Validation.R')
-# source('./method_functions.R')
-# source('./evaluate.R')
-# 
-# path.input <- '/home/zy/scRef/'
-# path.output <- '/home/zy/scRef/cross_validation/train4_test1/'
-
-setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
+setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train4_test1')
 source('./Cross_Validation.R')
 source('./method_functions.R')
 source('./evaluate.R')
 
-path.input <- '/home/drizzle_zhang/scRef/'
-path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
+path.input <- '/home/zy/scRef/'
+path.output <- '/home/zy/scRef/cross_validation/train4_test1/Habib/'
+
+# setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
+# source('./Cross_Validation.R')
+# source('./method_functions.R')
+# source('./evaluate.R')
+# 
+# path.input <- '/home/drizzle_zhang/scRef/'
+# path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
 
 # generate cross validation dataset
-LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
+LabelsPath <- paste0(path.input, 'sc_data/Habib_exp_sc_mat_cluster_original.txt')
 OutputDir <- path.output
 # Cross_Validation(LabelsPath, OutputDir)
 
-DataPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat.txt')
-LabelsPath <- paste0(path.input, 'summary/Zeisel_exp_sc_mat_cluster_original.txt')
+DataPath <- paste0(path.input, 'sc_data/Habib_exp_sc_mat.txt')
+LabelsPath <- paste0(path.input, 'sc_data/Habib_exp_sc_mat_cluster_original.txt')
 CV_RDataPath <- paste0(path.output, 'CV_folds.RData')
+
+# SingleR
+run_SingleR(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scmap
+run_scmap(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# CHETAH
+run_CHETAH(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scPred
+run_scPred(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# sciBet
+run_sciBet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scRef
+run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# singleCellNet
+run_singleCellNet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+# scID
+run_scID(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+
 
 # heatmap
 df.heatmap <- data.frame(stringsAsFactors = F)
@@ -157,19 +175,19 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 
 # CaSTLe
 # run_CaSTLe(DataPath,LabelsPath,CV_RDataPath,OutputDir)
-TrueLabelsPath <- paste0(OutputDir, 'CaSTLe_True_Labels.csv')
-PredLabelsPath <- paste0(OutputDir, 'CaSTLe_Pred_Labels.csv')
-res.CaSTLe <- evaluate(TrueLabelsPath, PredLabelsPath)
-df.sub <- data.frame(term = names(res.CaSTLe$F1), 
-                     method = rep('CaSTLe', length(res.CaSTLe$F1)),
-                     value = res.CaSTLe$F1, stringsAsFactors = F)
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'macro F1', method = 'CaSTLe',
-                           value = res.CaSTLe$Mean_F1, stringsAsFactors = F))
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'CaSTLe',
-                           value = res.CaSTLe$Acc, stringsAsFactors = F))
-df.heatmap <- rbind(df.heatmap, df.sub)
+# TrueLabelsPath <- paste0(OutputDir, 'CaSTLe_True_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'CaSTLe_Pred_Labels.csv')
+# res.CaSTLe <- evaluate(TrueLabelsPath, PredLabelsPath)
+# df.sub <- data.frame(term = names(res.CaSTLe$F1), 
+#                      method = rep('CaSTLe', length(res.CaSTLe$F1)),
+#                      value = res.CaSTLe$F1, stringsAsFactors = F)
+# df.sub <- rbind(df.sub, 
+#                 data.frame(term = 'macro F1', method = 'CaSTLe',
+#                            value = res.CaSTLe$Mean_F1, stringsAsFactors = F))
+# df.sub <- rbind(df.sub, 
+#                 data.frame(term = 'Accuracy', method = 'CaSTLe',
+#                            value = res.CaSTLe$Acc, stringsAsFactors = F))
+# df.heatmap <- rbind(df.heatmap, df.sub)
 
 # scID
 # run_scID(DataPath,LabelsPath,CV_RDataPath,OutputDir)
