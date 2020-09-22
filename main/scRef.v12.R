@@ -24,13 +24,13 @@
 }
 
 
-.get_high_variance_genes <- function(exp_ref_mat, num.genes = 2000, type_ref = 'count') {
-    if (type_ref == 'count') {
+.get_high_variance_genes <- function(exp_ref_mat, num.genes = 2000, type_ref = 'sum-counts') {
+    if (type_ref == 'sum-counts') {
         seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
         seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
                                     scale.factor = 1e6, verbose = F)
     }
-    if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
+    if (type_ref %in% c('fpkm', 'tpm', 'rpkm')) {
         exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
         seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
         seurat.Ref@assays$RNA@data <- exp_ref_mat
@@ -382,7 +382,7 @@
 }
 
 
-.find_markers_manual <- function(exp_ref_mat, ref_MCA_names, type_ref = 'count', 
+.find_markers_manual <- function(exp_ref_mat, ref_MCA_names, type_ref = 'sum-counts', 
                                  out.group = 'MCA', topN = NULL) {
     # check parameters
     if (!is.null(topN)) {
@@ -396,13 +396,13 @@
     fpm.MCA <- as.matrix(seurat.MCA@assays$RNA@data)
     
     # transform count to fpm
-    if (type_ref == 'count') {
+    if (type_ref == 'sum-counts') {
         seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
         seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
                                     scale.factor = 1e6, verbose = F)
         exp_ref_mat <- as.matrix(seurat.Ref@assays$RNA@data)
     }
-    if (type_ref %in% c('fpkm', 'tpm', 'rpkm', 'bulk')) {
+    if (type_ref %in% c('fpkm', 'tpm', 'rpkm')) {
         exp_ref_mat <- as.matrix(log1p(exp_ref_mat))
     }
     
@@ -475,7 +475,7 @@
 
 
 .find_markers_auto <- function(exp_ref_mat, out.group, 
-                               type_ref = 'count', use.RUVseq = T, topN = 100) {
+                               type_ref = 'sum-counts', use.RUVseq = T, topN = 100) {
     library(parallel, verbose = F)
     library(Seurat, verbose = F)
     # check parameters
@@ -486,7 +486,7 @@
     }
     
     # transform count to fpm
-    if (type_ref == 'count') {
+    if (type_ref == 'sum-counts') {
         seurat.Ref <- CreateSeuratObject(counts = exp_ref_mat, project = "Ref")
         seurat.Ref <- NormalizeData(seurat.Ref,normalization.method = "LogNormalize",
                                     scale.factor = 1e6, verbose = F)
@@ -520,7 +520,7 @@
     names.mix <- c(paste0('MCA.', cell.MCA), paste0('Ref.', cell.ref))
     dimnames(mtx.in)[[2]] <- names.mix
     if (use.RUVseq) {
-        library(RUVSeq)
+        library(RUVSeq, verbose = F)
         seqRUVg <- RUVg(as.matrix(mtx.in), gene.constant, k=1, isLog = T)
         mtx.combat <- seqRUVg$normalizedCounts
     } else {
@@ -779,7 +779,7 @@
 }
 
 
-.cutoff_GMM <- function(df.tags.in, base.cutoff = 5, opt.strict = T) {
+.cutoff_GMM <- function(df.tags.in, num_cluster = 6, base.cutoff = 5, opt.strict = T) {
     library(mclust, verbose = F)
     cells <- unique(df.tags.in$scRef.tag)
     vec.cutoff <- c()
@@ -787,7 +787,8 @@
         cell <- cells[i]
         print(cell)
         df.sub <- df.tags.in[df.tags.in$scRef.tag == cell, ]
-        model <- densityMclust(df.sub$log10Pval, G = min(5, nrow(df.sub)-1), verbose = F)
+        model <- densityMclust(df.sub$log10Pval, 
+                               G = min(num_cluster, nrow(df.sub)-1), verbose = F)
         cluster.mean <- model$parameters$mean
         names(cluster.mean) <- as.character(1:length(cluster.mean))
         cluster.sd <- sqrt(model$parameters$variance$sigmasq)
@@ -848,9 +849,9 @@
 }
 
 
-SCREF <- function(exp_sc_mat, exp_ref_mat, 
+SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL, 
                   identify_unassigned = T, corr_use_HVGene = T,
-                  type_ref = 'count', out.group = 'MCA', use.RUVseq = T, topN = 100, 
+                  type_ref = 'sc-counts', out.group = 'MCA', use.RUVseq = T, topN = 100, 
                   cluster.num.pc =50, cluster.resolution = 3, 
                   cluster.speed = T, cluster.cell = 5,
                   method1 = 'kendall', method2 = 'multinomial', 
@@ -859,11 +860,19 @@ SCREF <- function(exp_sc_mat, exp_ref_mat,
                   min_cell = 5, CPU = 4) {
     library(parallel, verbose = F)
     # check parameters
-    if (!type_ref %in% c('count', 'fpkm', 'tpm', 'rpkm', 'bulk')) {
+    if (!type_ref %in% c('sc-counts', 'sum-counts', 'fpkm', 'tpm', 'rpkm')) {
         stop('Error: inexistent input of reference data format')
     }
     
     time1 <- Sys.time()
+    # get sum-counts format
+    if (type_ref == 'sc-counts') {
+        print('Sum single cell counts matrix:')
+        label.in <- data.frame(cell_id = colnames(exp_ref_mat), tag = exp_ref_label)
+        exp_ref_mat.sum <- .generate_ref(exp_ref_mat, label.in, M='SUM')
+        exp_ref_mat <- exp_ref_mat.sum
+        type_ref <- 'sum-counts'
+    }
 
     # get overlap genes
     out.overlap <- .get_overlap_genes(exp_sc_mat, exp_ref_mat)

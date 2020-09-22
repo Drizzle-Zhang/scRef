@@ -94,7 +94,7 @@ sub.astrocyte$cluster <- model$classification
 sub.neuron <- df.tags[df.tags$scRef.tag.12 == 'Neuron', ]
 sub.neuron <- df.tags1[df.tags1$scRef.tag == 'Neuron', ]
 ggplot(sub.neuron, aes(x = log10Pval)) + geom_density()
-model.neuron <- densityMclust(sub.neuron$log10Pval, modelNames = 'V', G=5)
+model.neuron <- densityMclust(sub.neuron$log10Pval, G=8)
 summary(model.neuron, parameters = T)
 
 sub.Endo <- df.tags1[df.tags1$scRef.tag == 'Endothelial Cell', ]
