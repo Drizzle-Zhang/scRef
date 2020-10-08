@@ -83,13 +83,45 @@ result.scref <- SCREF(exp_sc_mat, exp_ref_mat, type_ref = 'count',
                       min_cell = 10, CPU = 8)
 
 library(ggplot2)
+library("scales")
 library(mclust)
 sub.astrocyte <- df.tags[df.tags$scRef.tag == 'Astrocyte', ]
 sub.astrocyte <- df.tags1[df.tags1$scRef.tag == 'Astrocyte', ]
 ggplot(sub.astrocyte, aes(x = log10Pval)) + geom_density()
-model.astrocyte <- densityMclust(sub.astrocyte$log10Pval, G=5)
+model.astrocyte <- densityMclust(sub.astrocyte$log10Pval)
 summary(model.astrocyte, parameters = T)
 sub.astrocyte$cluster <- model$classification
+Thickness <- sub.astrocyte$log10Pval
+dens <- model.astrocyte
+x <- seq(min(Thickness)-diff(range(Thickness))/10,max(Thickness)+diff(range(Thickness))/10, length = 2000)
+cdens <- predict(dens, x, what = "cdens")
+cdens <- t(apply(cdens, 1, function(d) d*dens$parameters$pro))
+for (i in 1:dim(cdens)[2]) {
+    if (i == 1) {
+        df.dens <- data.frame(score = x, density = cdens[, 1], cluster = rep('1', 2000))
+    } else {
+        df.dens <- rbind(df.dens, data.frame(score = x, density = cdens[, i], cluster = rep(as.character(i), 2000)))
+    }
+}
+# ggplot(df.dens, aes(x = score, y = density, color = cluster)) + geom_line()
+plot.2 <- ggplot() + 
+    geom_histogram(data = sub.astrocyte, aes(x = log10Pval), fill = 'gray', alpha = 1, binwidth = 5) + 
+    geom_line(data = df.dens, aes(x = score, y = rescale(density, c(0, 250)), color = cluster)) + 
+    geom_vline(xintercept = min(Thickness[dens$classification == '4'])) + 
+    labs(x = 'Confidence Score', y = 'Count') + 
+    scale_y_continuous(breaks=pretty_breaks(5),sec.axis = sec_axis( ~rescale(.,c(0,0.25)),name = "Density"))+
+    theme(
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = 'transparent', color = 'gray'),
+        legend.position = "none",
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        # legend.text = element_text(size = 15)
+    )
+ggsave(plot = plot.2, path = '/home/zy/scRef/figure', filename = 'GMM2.png',
+       units = 'cm', height = 10, width = 12)
 
 sub.neuron <- df.tags[df.tags$scRef.tag.12 == 'Neuron', ]
 sub.neuron <- df.tags1[df.tags1$scRef.tag == 'Neuron', ]
@@ -99,7 +131,7 @@ summary(model.neuron, parameters = T)
 
 sub.Endo <- df.tags1[df.tags1$scRef.tag == 'Endothelial Cell', ]
 ggplot(sub.Endo, aes(x = log10Pval)) + geom_density()
-model.Endo <- densityMclust(sub.Endo$log10Pval)
+model.Endo <- densityMclust(sub.Endo$log10Pval, G=3)
 summary(model.Endo, parameters = T)
 
 sub.Microglia <- df.tags[df.tags$scRef.tag == 'Microglia', ]
@@ -107,10 +139,41 @@ ggplot(sub.Microglia, aes(x = log10Pval)) + geom_density()
 model.Microglia <- densityMclust(sub.Microglia$log10Pval)
 summary(model.Microglia, parameters = T)
 
-sub.Oligo <- df.tags[df.tags$scRef.tag == 'Oligodendrocyte', ]
-ggplot(sub.Oligo, aes(x = log10Pval)) + geom_density()
-model.Oligo <- densityMclust(sub.Oligo$log10Pval)
+sub.Oligo <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte', ]
+# p1 <- ggplot(sub.Oligo, aes(x = log10Pval)) + geom_histogram()
+model.Oligo <- densityMclust(sub.Oligo$log10Pval, G =2)
 summary(model.Oligo, parameters = T)
+Thickness <- sub.Oligo$log10Pval
+dens <- model.Oligo
+x <- seq(min(Thickness)-diff(range(Thickness))/10,max(Thickness)+diff(range(Thickness))/10, length = 2000)
+cdens <- predict(dens, x, what = "cdens")
+cdens <- t(apply(cdens, 1, function(d) d*dens$parameters$pro))
+for (i in 1:dim(cdens)[2]) {
+    if (i == 1) {
+        df.dens <- data.frame(score = x, density = cdens[, 1], cluster = rep('1', 2000))
+    } else {
+        df.dens <- rbind(df.dens, data.frame(score = x, density = cdens[, i], cluster = rep(as.character(i), 2000)))
+    }
+}
+# ggplot(df.dens, aes(x = score, y = density, color = cluster)) + geom_line()
+plot.1 <- ggplot() + 
+    geom_histogram(data = sub.Oligo, aes(x = log10Pval), fill = 'gray', alpha = 1, binwidth = 3) + 
+    geom_line(data = df.dens, aes(x = score, y = rescale(density, c(0, 80)), color = cluster)) + 
+    geom_vline(xintercept = 5) + 
+    labs(x = 'Confidence Score', y = 'Count') + 
+    scale_y_continuous(breaks=pretty_breaks(5),sec.axis = sec_axis( ~rescale(.,c(0,0.6)),name = "Density"))+
+    theme(
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = 'transparent', color = 'gray'),
+        legend.position = "none",
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        # legend.text = element_text(size = 15)
+    )
+ggsave(plot = plot.1, path = '/home/zy/scRef/figure', filename = 'GMM1.png',
+       units = 'cm', height = 10, width = 12)
 
 sub.OPC <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte Precursor Cell', ]
 ggplot(sub.OPC, aes(x = log10Pval)) + geom_density()

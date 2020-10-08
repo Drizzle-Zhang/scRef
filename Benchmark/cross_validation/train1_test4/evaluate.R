@@ -21,7 +21,7 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   "
   # import python package: sklearn.metrics
   library(reticulate)
-  # use_python('/home/drizzle_zhang/tools/anaconda3/bin/python3', required = T)
+  use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
   # py_config()
   py_module_available('sklearn')
   metrics <- import('sklearn.metrics')

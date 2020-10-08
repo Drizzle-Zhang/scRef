@@ -41,11 +41,10 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
         scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
             df.cell.names[j, 'sc.name']
     }
-    meta.tag$scRef.tag <- scRef.tag
-    
+
     true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
     true.labels <- unique(true.tag)
-    our.tag <- meta.tag$scRef.tag
+    our.tag <- scRef.tag
     weighted_macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'weighted', labels = true.labels)
     macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'macro', labels = true.labels)
     accuracy <- metrics$accuracy_score(true.tag, our.tag)
@@ -98,10 +97,11 @@ OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 exp_Habib <- OUT$data.filter
 label_Habib <- OUT$label.filter
 exp_sc_mat <- exp_Habib
+label_sc <- label_Habib
 
 ref.names <- unique(ref.labels)
 # list of cell names
-all.cell <- unique(label_Habib[,1])
+all.cell <- unique(label_sc[,1])
 sc.name <- c("Oligodend", "microglia", "Astrocyte", "Neurons", "Unassigned",
              "Unassigned", "Unassigned", "OPC", "Unassigned", "Unassigned", "Ependymocytes")
 unknow.cell <- setdiff(all.cell, sc.name)
@@ -232,10 +232,181 @@ pred.scID <- scID_output$labels
 saveRDS(pred.scID, 
         file = paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata'))
 
+### scClassify
+library("scClassify")
+library(Matrix)
+exprsMat_train <- as(as.matrix(log1p(ref.mtx)), "dgCMatrix")
+exp_sc_mat <- as(as.matrix(log1p(exp_sc_mat)), "dgCMatrix")
+scClassify_res <- scClassify(exprsMat_train = exprsMat_train,
+                             cellTypes_train = ref.labels,
+                             exprsMat_test = list(one = exp_sc_mat),
+                             tree = "HOPACH",
+                             algorithm = "WKNN",
+                             selectFeatures = c("limma"),
+                             similarity = c("pearson"),
+                             returnList = FALSE,
+                             verbose = FALSE)
+pred.scClassify <- scClassify_res$testRes$one$pearson_WKNN_limma$predRes
+saveRDS(pred.scClassify, 
+        file = paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata'))
+
 #############################################
+
 
 # evaluation
 #############################################
+true.tags <- label_sc$label.unlabeled.use.cols...
+df.plot <- data.frame(stringsAsFactors = F)
+
+rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
+pred.scRef <- readRDS(rda.scRef)
+res.scRef <- simple.evaluation(true.tags, pred.scRef, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scRef',
+                     value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scRef',
+                           value = res.scRef$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scRef',
+                           value = res.scRef$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
+pred.sciBet <- readRDS(rda.sciBet)
+res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'sciBet',
+                     value = res.sciBet$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'sciBet',
+                           value = res.sciBet$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'sciBet',
+                           value = res.sciBet$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
+pred.singleCellNet <- readRDS(rda.singleCellNet)
+res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
+                     value = res.singleCellNet$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'singleCellNet',
+                           value = res.singleCellNet$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'singleCellNet',
+                           value = res.singleCellNet$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
+pred.singleR <- readRDS(rda.singleR)
+res.singleR <- simple.evaluation(true.tags, pred.singleR, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleR',
+                     value = res.singleR$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'singleR',
+                           value = res.singleR$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'singleR',
+                           value = res.singleR$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
+pred.scmap.cluster <- readRDS(rda.scmap.cluster)
+res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
+                     value = res.scmap.cluster$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scmap-cluster',
+                           value = res.scmap.cluster$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scmap-cluster',
+                           value = res.scmap.cluster$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
+pred.scmap.cell <- readRDS(rda.scmap.cell)
+res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
+                     value = res.scmap.cell$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scmap-cell',
+                           value = res.scmap.cell$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scmap-cell',
+                           value = res.scmap.cell$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
+pred.CHETAH <- readRDS(rda.CHETAH)
+res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'CHETAH',
+                     value = res.CHETAH$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'CHETAH',
+                           value = res.CHETAH$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'CHETAH',
+                           value = res.CHETAH$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
+pred.scPred <- readRDS(rda.scPred)
+res.scPred <- simple.evaluation(true.tags, pred.scPred, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scPred',
+                     value = res.scPred$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scPred',
+                           value = res.scPred$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scPred',
+                           value = res.scPred$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
+pred.scID <- readRDS(rda.scID)
+res.scID <- simple.evaluation(true.tags, pred.scID, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scID',
+                     value = res.scID$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scID',
+                           value = res.scID$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scID',
+                           value = res.scID$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
+pred.scClassify <- readRDS(rda.scClassify)
+res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.cell.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scClassify',
+                     value = res.scClassify$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scClassify',
+                           value = res.scClassify$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scClassify',
+                           value = res.scClassify$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+# sort
+df.acc <- df.plot[df.plot$term == 'Accuracy', ]
+df.plot$method <- factor(df.plot$method, 
+                            levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
 
+library(ggplot2)
+plot.bar <- ggplot(df.plot,
+       aes(x = method, y = value, fill = term)) +
+    geom_bar(position = 'dodge', stat = 'identity') +
+    theme_bw() +
+    # facet_wrap(~ Evaluator, scales = 'free_x', ncol = 2) +
+    labs(title = "", y = 'Score', x = 'Method', fill = 'Metrics methods') + 
+    theme(axis.text = element_text(size = 9),
+          panel.grid = element_blank(),
+          panel.grid.major.y = element_line(color = 'grey', size = 0.2),
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.title = element_text(size = 12)) 
+ggsave(filename = paste0(ref.dataset, '_', dataset, '.png'), 
+       path = path.output, plot = plot.bar,
+       units = 'cm', height = 12, width = 18)
 
