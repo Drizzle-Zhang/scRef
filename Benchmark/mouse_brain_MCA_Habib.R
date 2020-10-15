@@ -110,10 +110,11 @@ df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:len
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v12.R')
+source('/home/zy/my_git/scRef/main/scRef.v14.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
+                      method1 = 'kendall',
                       cluster.speed = T, cluster.cell = 10,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag

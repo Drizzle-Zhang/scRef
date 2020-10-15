@@ -135,6 +135,7 @@ source('/home/zy/my_git/scRef/main/scRef.v12.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
+                      method1 = 'kendall',
                       cluster.speed = T, cluster.cell = 10,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
@@ -253,6 +254,24 @@ pred.scID <- scID_output$labels
 saveRDS(pred.scID, 
         file = paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata'))
 
+### scClassify
+library("scClassify")
+library(Matrix)
+exprsMat_train <- as(as.matrix(log1p(ref.mtx)), "dgCMatrix")
+exp_sc_mat <- as(as.matrix(log1p(exp_sc_mat)), "dgCMatrix")
+scClassify_res <- scClassify(exprsMat_train = exprsMat_train,
+                             cellTypes_train = ref.labels,
+                             exprsMat_test = list(one = exp_sc_mat),
+                             tree = "HOPACH",
+                             algorithm = "WKNN",
+                             selectFeatures = c("limma"),
+                             similarity = c("pearson"),
+                             returnList = FALSE,
+                             verbose = FALSE)
+pred.scClassify <- scClassify_res$testRes$one$pearson_WKNN_limma$predRes
+saveRDS(pred.scClassify, 
+        file = paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata'))
+
 #############################################
 
 
@@ -289,7 +308,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
 pred.singleCellNet <- readRDS(rda.singleCellNet)
-res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.cell.names)
+res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
                      value = res.singleCellNet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -302,7 +321,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
 pred.singleR <- readRDS(rda.singleR)
-res.singleR <- simple.evaluation(true.tags, pred.singleR, df.cell.names)
+res.singleR <- simple.evaluation(true.tags, pred.singleR, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleR',
                      value = res.singleR$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -315,7 +334,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
 pred.scmap.cluster <- readRDS(rda.scmap.cluster)
-res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.cell.names)
+res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
                      value = res.scmap.cluster$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -328,7 +347,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
 pred.scmap.cell <- readRDS(rda.scmap.cell)
-res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.cell.names)
+res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
                      value = res.scmap.cell$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -341,7 +360,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
 pred.CHETAH <- readRDS(rda.CHETAH)
-res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.cell.names)
+res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'CHETAH',
                      value = res.CHETAH$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -354,7 +373,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
 pred.scPred <- readRDS(rda.scPred)
-res.scPred <- simple.evaluation(true.tags, pred.scPred, df.cell.names)
+res.scPred <- simple.evaluation(true.tags, pred.scPred, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scPred',
                      value = res.scPred$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -367,7 +386,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
 pred.scID <- readRDS(rda.scID)
-res.scID <- simple.evaluation(true.tags, pred.scID, df.cell.names)
+res.scID <- simple.evaluation(true.tags, pred.scID, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scID',
                      value = res.scID$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -376,6 +395,19 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scID',
                            value = res.scID$accuracy, stringsAsFactors = F))
+df.plot <- rbind(df.plot, df.sub)
+
+rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
+pred.scClassify <- readRDS(rda.scClassify)
+res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.ref.names, df.sc.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scClassify',
+                     value = res.scClassify$weighted_macro_f1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Macro F1', method = 'scClassify',
+                           value = res.scClassify$macro_f1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scClassify',
+                           value = res.scClassify$accuracy, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 # sort

@@ -35,15 +35,16 @@ prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
 }
 
 # evaluation
-simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
+simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     # uniform tags
-    for (j in 1:dim(df.cell.names)[1]) {
-        scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
-            df.cell.names[j, 'sc.name']
+    for (j in 1:dim(df.ref.names)[1]) {
+        scRef.tag[scRef.tag == df.ref.names[j, 'ref.name']] <- df.ref.names[j, 'name']
     }
-
-    true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
-    true.labels <- unique(true.tag)
+    for (j in 1:dim(df.sc.names)[1]) {
+        true.tag[true.tag == df.sc.names[j, 'sc.name']] <- df.sc.names[j, 'name']
+    }
+    
+    true.labels <- setdiff(unique(true.tag), 'Unassigned')
     our.tag <- scRef.tag
     weighted_macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'weighted', labels = true.labels)
     macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'macro', labels = true.labels)
@@ -87,7 +88,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
 source('/home/zy/my_git/scRef/main/scRef.v12.R')
 
 ############# regard sc-counts data as reference
-path.input <- '/home/zy/scRef/sc_data/'
+path.input <- '/home/zy/scRef/summary/'
 path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
 dataset <- 'Tasic'
 file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
@@ -102,50 +103,33 @@ ref.mtx <- exp_Tasic
 ref.dataset <- 'Tasic'
 
 ############### import unlabeled data
-############### Mizrak
+############### Tasic2018
 path.input <- '/home/zy/scRef/sc_data/'
 path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
-dataset <- 'Mizrak'
-######################
-# library(stringr)
-# file.mtx.rep1 <- paste0(path.input, dataset, '/GSE109447_29319_cells.matrix.txt')
-# mtx.rep1 <- read.delim(file.mtx.rep1, header = F, stringsAsFactors = F)
-# file.cellid.rep1 <- paste0(path.input, dataset, '/GSE109447_29319_cells_id_repinfo.txt')
-# df.cellid <- read.table(file.cellid.rep1, stringsAsFactors = F, sep = '\t')
-# df.cellid <- str_replace_all(df.cellid, '_', '.')
-# df.cellid <- str_replace_all(df.cellid, '-', '.')
-# file.cells.rep1 <- paste0(path.input, dataset, '/GSE109447_Rep1_29319cells_Basic.txt')
-# df.cells <- read.table(file.cells.rep1, stringsAsFactors = F, sep = '\t')
-# 
-# data.unlabeled <- mtx.rep1
-# data.genes <- data.unlabeled[, 'V2']
-# data.unlabeled[, 'V1'] <- NULL
-# data.unlabeled[, 'V2'] <- NULL
-# data.unlabeled <- as.matrix(data.unlabeled)
-# rownames(data.unlabeled) <- data.genes
-# colnames(data.unlabeled) <- df.cellid$V1
-# # read label file
-# label.unlabeled <- data.frame(Cluster = df.cells$V1, row.names = df.cellid$V1)
-# 
-# OUT <- list()
-# OUT$data.filter <- data.unlabeled
-# OUT$label.filter <- label.unlabeled
+dataset <- 'Tasic2018'
+file.data.unlabeled <- paste0(path.input, dataset, '/cell_exp.txt')
+file.label.unlabeled <- paste0(path.input, dataset, '/cell_meta.txt')
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-##########
-
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Mizrak <- OUT$data.filter
-label_Mizrak <- OUT$label.filter
-exp_sc_mat <- exp_Mizrak
-label_sc <- label_Mizrak
+exp_Tasic2018 <- OUT$data.filter
+label_Tasic2018 <- OUT$label.filter
+exp_sc_mat <- exp_Tasic2018
+label_sc <- label_Tasic2018
 
 ref.names <- unique(ref.labels)
 # list of cell names
 all.cell <- unique(label_sc[,1])
-sc.name <- c("Neuron", "Endothelial", "Astrocyte", "Microglia",
-             "Oligodendrocyte", "OPC")
-unknow.cell <- setdiff(all.cell, sc.name)
-df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:length(sc.name))
+uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
+                   "Oligo/OPC", "Oligo/OPC")
+df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
+uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
+                   "Neuron", "Neuron", "Neuron", "Neuron", 
+                   "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
+                   "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
+                   "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
+                   "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
+df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
@@ -154,8 +138,9 @@ source('/home/zy/my_git/scRef/main/scRef.v12.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
+                      method1 = 'kendall',
                       cluster.speed = T, cluster.cell = 10,
-                      min_cell = 10, CPU = 8)
+                      min_cell = 10, CPU = 8, GMM.ceiling_cutoff = 20)
 pred.scRef <- result.scref$final.out$scRef.tag
 saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
 
@@ -295,12 +280,12 @@ saveRDS(pred.scClassify,
 
 # evaluation
 #############################################
-true.tags <- label_sc$Cluster
+true.tags <- label_sc$label.unlabeled.use.cols...
 df.plot <- data.frame(stringsAsFactors = F)
 
 rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
 pred.scRef <- readRDS(rda.scRef)
-res.scRef <- simple.evaluation(true.tags, pred.scRef, df.cell.names)
+res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scRef',
                      value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -313,7 +298,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
 pred.sciBet <- readRDS(rda.sciBet)
-res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.cell.names)
+res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'sciBet',
                      value = res.sciBet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -326,7 +311,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
 pred.singleCellNet <- readRDS(rda.singleCellNet)
-res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.cell.names)
+res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
                      value = res.singleCellNet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -339,7 +324,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
 pred.singleR <- readRDS(rda.singleR)
-res.singleR <- simple.evaluation(true.tags, pred.singleR, df.cell.names)
+res.singleR <- simple.evaluation(true.tags, pred.singleR, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleR',
                      value = res.singleR$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -352,7 +337,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
 pred.scmap.cluster <- readRDS(rda.scmap.cluster)
-res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.cell.names)
+res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
                      value = res.scmap.cluster$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -365,7 +350,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
 pred.scmap.cell <- readRDS(rda.scmap.cell)
-res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.cell.names)
+res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
                      value = res.scmap.cell$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -378,7 +363,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
 pred.CHETAH <- readRDS(rda.CHETAH)
-res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.cell.names)
+res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'CHETAH',
                      value = res.CHETAH$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -391,7 +376,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
 pred.scPred <- readRDS(rda.scPred)
-res.scPred <- simple.evaluation(true.tags, pred.scPred, df.cell.names)
+res.scPred <- simple.evaluation(true.tags, pred.scPred, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scPred',
                      value = res.scPred$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -404,7 +389,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
 pred.scID <- readRDS(rda.scID)
-res.scID <- simple.evaluation(true.tags, pred.scID, df.cell.names)
+res.scID <- simple.evaluation(true.tags, pred.scID, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scID',
                      value = res.scID$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -417,7 +402,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
 pred.scClassify <- readRDS(rda.scClassify)
-res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.cell.names)
+res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scClassify',
                      value = res.scClassify$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 

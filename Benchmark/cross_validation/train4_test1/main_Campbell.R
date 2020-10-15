@@ -52,6 +52,7 @@ OutputDir <- path.output
 # saveRDS(OUT, file = DataPath)
 
 # generate cross validation dataset
+# OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 # label.filter <- OUT$label.filter
 # LabelsPath <- paste0(path.input, 'Habib_label.txt')
 # write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
@@ -291,7 +292,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 
 unique.term <- unique(df.heatmap$term)
 df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
-df.acc <- df.heatmap[df.heatmap$term == 'macro F1', ]
+df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
 

@@ -235,7 +235,7 @@
 }
 
 
-.get_tag_max <- function(P_REF_GIVEN_SC){
+.get_tag_max <- function(P_REF_GIVEN_SC) {
     RN <- rownames(P_REF_GIVEN_SC)
     CN <- colnames(P_REF_GIVEN_SC)
     TAG <- cbind(CN, rep('NA', length(CN)))
@@ -243,6 +243,20 @@
     while (i <= length(CN)) {
         this_rn_index <- which(P_REF_GIVEN_SC[, i] == max(P_REF_GIVEN_SC[, i]))[1]
         TAG[i, 2] <- RN[this_rn_index]
+        i <- i + 1
+    }
+    colnames(TAG) <- c('cell_id', 'tag')
+    return(TAG)
+}
+
+
+.get_tag_second <- function(P_REF_GIVEN_SC) {
+    RN <- rownames(P_REF_GIVEN_SC)
+    CN <- colnames(P_REF_GIVEN_SC)
+    TAG <- cbind(CN, rep('NA', length(CN)))
+    i <- 1
+    while (i <= length(CN)) {
+        TAG[i, 2] <- RN[order(P_REF_GIVEN_SC[,i], decreasing = T)[2]]
         i <- i + 1
     }
     colnames(TAG) <- c('cell_id', 'tag')
@@ -728,7 +742,8 @@
 }
 
 
-.one_confirm_label <- function(barcode, exp_sc_mat, df.tag, list.cell.genes) {
+.one_confirm_label <- function(barcode, exp_sc_mat, df.tag, list.cell.genes, 
+                               method.test = 'wilcox.test') {
     expression.barcode <- exp_sc_mat[, barcode]
     bool.mark.gene <- rep(1, dim(exp_sc_mat)[1])
     cell <- df.tag[barcode, 'scRef.tag']
@@ -738,13 +753,28 @@
     test.in <- as.data.frame(test.in)
     names(test.in) <- c('expression.level', 'factor.mark.gene')
     test.in$factor.mark.gene <- as.factor(test.in$factor.mark.gene)
-    out.test <-
-        wilcox.test(
-            formula = expression.level ~ factor.mark.gene,
-            data = test.in,
-            alternative = 'less',
-            digits.rank = 7
-        )
+    if (method.test == 'ks.test') {
+        vec.other <- test.in[test.in$factor.mark.gene == 1, 'expression.level']
+        vec.marker <- test.in[test.in$factor.mark.gene == 2, 'expression.level']
+        out.test <-
+            ks.test(
+                x = vec.other, y = vec.marker,
+                data = test.in,
+                alternative = 'greater'
+            )
+    } else {
+        if (method.test == 'wilcox.test') {
+            out.test <-
+                wilcox.test(
+                    formula = expression.level ~ factor.mark.gene,
+                    data = test.in,
+                    digits.rank = 0,
+                    alternative = 'less'
+                )
+        } else {
+            stop('Error: Please provide correct test method!')
+        }
+    }
     pvalue <- max(out.test$p.value, 1e-200)
     # library(ggplot2)
     # # ggplot(test.in, aes(x = expression.level, color = factor.mark.gene)) +
@@ -789,7 +819,7 @@
     cl = makeCluster(CPU, outfile = '')
     RUN <- parLapply(
         cl = cl,
-        dimnames(exp_sc_mat)[[2]],
+        row.names(df.tag),
         .one_confirm_label,
         exp_sc_mat = exp_sc_mat,
         df.tag = df.tag,
@@ -855,7 +885,7 @@
         if (length(cluster.known) > 1) {
             for (j in rev(1:(length(cluster.known) - 1))) {
                 cluster <- cluster.known[j]
-                logp.j.right <- cluster.mean[cluster] + max(3 * cluster.sd[cluster] ,10)
+                logp.j.right <- cluster.mean[cluster] + max(3 * cluster.sd[cluster] ,15)
                 known.left <- cluster.mean[cluster.known[j+1]]
                 # print(cluster)
                 # print(logp.j.right)
@@ -878,7 +908,8 @@
         }
         df.sub$classification <- model$classification
         if (opt.strict) {
-          sub.cutoff <- median(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
+            sub.cutoff <- cluster.mean[cluster.known[1]]
+            # sub.cutoff <- median(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
         } else {
             sub.cutoff <- 
                 min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
@@ -889,6 +920,44 @@
     }
     names(vec.cutoff) <- cells
     return(vec.cutoff)
+}
+
+
+.combine_tags <- function(df.tags1, df.tags2) {
+    # concat reference pval and local pval
+    pvalue1 <- df.tags1[, c('scRef.tag', 'pvalue')]
+    names(pvalue1) <- c('scRef.tag.1', 'pvalue.1')
+    pvalue2 <- df.tags2[, c('scRef.tag', 'pvalue')]
+    names(pvalue2) <- c('scRef.tag.2', 'pvalue.2')
+    pvalue <- merge(pvalue1, pvalue2, by = 'row.names')
+    row.names(pvalue) <- pvalue$Row.names
+    pvalue$Row.names <- NULL
+    
+    # select more confident tag
+    mtx.tag <- as.matrix(pvalue[, c('scRef.tag.1', 'scRef.tag.2')])
+    mtx.pval <- as.matrix(pvalue[, c('pvalue.1', 'pvalue.2')])
+    mtx.rank <- apply(mtx.pval, 1, rank, ties.method = "first")
+    tag.final <-
+        apply(as.array(1:dim(mtx.tag)[1]), 1, function(i) {
+            mtx.tag[i, mtx.rank[1, i]]
+        })
+    pval.final <-
+        apply(as.array(1:dim(mtx.pval)[1]), 1, function(i) {
+            mtx.pval[i, mtx.rank[1, i]]
+        })
+    tag.final <-
+        data.frame(
+            scRef.tag = tag.final,
+            pvalue = pval.final,
+            row.names = dimnames(mtx.tag)[[1]],
+            stringsAsFactors = F
+        )
+    
+    OUT <- list()
+    OUT$pvalue <- pvalue
+    OUT$tag.final <- tag.final
+    return(OUT)
+    
 }
 
 
@@ -990,16 +1059,20 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     
     gc()
     
-    tag1 <- .get_tag_max(out1)
+    tag1.first <- .get_tag_max(out1)
 
     if (identify_unassigned) {
         print('Build local reference')
-        df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
-        gc()
-        cell_ids <- dimnames(df.exp.merge)[[2]]
+        df.tags1.first <- .confirm_label(df.exp.merge, list.cell.genes, tag1.first, CPU = CPU)
+        tag1.second <- .get_tag_second(out1)
+        df.tags1.second <- .confirm_label(df.exp.merge, list.cell.genes, tag1.second, CPU = CPU)
+        out.combine1 <- .combine_tags(df.tags1.first, df.tags1.second)
+        df.tags1 <- out.combine1$tag.final
+        df.tags1$log10Pval <- -log10(df.tags1$pvalue)
+        cell_ids <- colnames(df.exp.merge)
         df.tags1 <- df.tags1[cell_ids, ]
-        # df.tags1.view <- merge(df.tags1, label.filter, by = 'row.names')
-
+        tag1 <- data.frame(cell_id = row.names(df.tags1), tag = df.tags1$scRef.tag)
+        
         # select cutoff.1 automatitically
         if (cutoff.1 == 'default') {
             df.cutoff.1 <- .cutoff_GMM(df.tags1, num_cluster = GMM.num_cluster, 
@@ -1110,9 +1183,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
             select.df.tags <- df.tags1[df.tags1$log10Pval >= cutoff.1, ]
             select.barcode <- row.names(select.df.tags)
         }
-        LocalRef <- .generate_ref(df.exp.merge[, cell_ids %in% select.barcode],
-                                  tag1[tag1[, 'cell_id'] %in% select.barcode, ], 
-                                  min_cell = min_cell)
+        select.exp <- df.exp.merge[, cell_ids %in% select.barcode]
+        select.tag1 <- tag1[tag1[, 'cell_id'] %in% select.barcode, ]
+        LocalRef <- .generate_ref(select.exp, select.tag1,  min_cell = min_cell)
     } else {
         if (single_round) {
             df.combine <- as.data.frame(tag1)
@@ -1135,7 +1208,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
             return(output)
             
         }
-        LocalRef <- .generate_ref(df.exp.merge, tag1, min_cell = min_cell)
+        LocalRef <- .generate_ref(df.exp.merge, tag1.first, min_cell = min_cell)
     }
     print('Cell types in local reference:')
     print(dimnames(LocalRef)[[2]])
@@ -1166,46 +1239,29 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     } else {
         out2 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
     }
-    tag2 <- .get_tag_max(out2)
+    tag2.first <- .get_tag_max(out2)
     gc()
     
     if (identify_unassigned) {
-        df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
+        df.tags2.first <- .confirm_label(df.exp.merge, local.cell.genes, tag2.first, CPU = CPU)
+        tag2.second <- .get_tag_second(out2)
+        df.tags2.second <- .confirm_label(df.exp.merge, local.cell.genes, tag2.second, CPU = CPU)
+        out.combine2 <- .combine_tags(df.tags2.first, df.tags2.second)
+        df.tags2 <- out.combine2$tag.final
+        df.tags2$log10Pval <- -log10(df.tags2$pvalue)
+        cell_ids <- colnames(df.exp.merge)
+        df.tags2 <- df.tags2[cell_ids, ]
+        tag2 <- data.frame(cell_id = row.names(df.tags2), tag = df.tags2$scRef.tag)
         gc()
-        df.tags2 <- df.tags2[dimnames(df.exp.merge)[[2]], ]
 
         print('Combine reference and local result:')
-        # concat reference pval and local pval
-        pvalue1 <- df.tags1[, c('scRef.tag', 'pvalue')]
-        names(pvalue1) <- c('scRef.tag.1', 'pvalue.1')
+        # combine reference pval and local pval
         del.cells <- setdiff(colnames(exp_ref_mat), colnames(LocalRef))
-        pvalue1$pvalue.1[pvalue1$scRef.tag.1 %in% del.cells] <- 1
-        pvalue2 <- df.tags2[, c('scRef.tag', 'pvalue')]
-        names(pvalue2) <- c('scRef.tag.2', 'pvalue.2')
-        pvalue <- merge(pvalue1, pvalue2, by = 'row.names')
-        row.names(pvalue) <- pvalue$Row.names
-        pvalue$Row.names <- NULL
-        
-        # select more confident tag
-        mtx.tag <- as.matrix(pvalue[, c('scRef.tag.1', 'scRef.tag.2')])
-        mtx.pval <- as.matrix(pvalue[, c('pvalue.1', 'pvalue.2')])
-        mtx.rank <- apply(mtx.pval, 1, rank, ties.method = "first")
-        tag.final <-
-            apply(as.array(1:dim(mtx.tag)[1]), 1, function(i) {
-                mtx.tag[i, mtx.rank[1, i]]
-            })
-        pval.final <-
-            apply(as.array(1:dim(mtx.pval)[1]), 1, function(i) {
-                mtx.pval[i, mtx.rank[1, i]]
-            })
-        tag.final <-
-            data.frame(
-                scRef.tag = tag.final,
-                pvalue = pval.final,
-                row.names = dimnames(mtx.tag)[[1]],
-                stringsAsFactors = F
-            )
-        
+        df.tags1$pvalue[df.tags1$scRef.tag %in% del.cells] <- 1
+        out.combine <- .combine_tags(df.tags1, df.tags2)
+        tag.final <- out.combine$tag.final
+        pvalue <- out.combine$pvalue
+       
         # modify tags and combine pval
         df.tags <- merge(pvalue, tag.final, by = 'row.names')
         row.names(df.tags) <- df.tags$Row.names

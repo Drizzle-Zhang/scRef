@@ -77,6 +77,22 @@ file.ref <- file.ref
 exp_ref_mat.origin <- read.table(file.ref, header=T, row.names=1, sep='\t', check.name=F)
 exp_ref_mat <- exp_ref_mat.origin
 
+
+############# regard sc-counts data as reference
+path.input <- '/home/zy/scRef/summary/'
+path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
+dataset <- 'Tasic'
+file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
+file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_merged.txt')
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
+# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
+OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
+exp_Tasic <- OUT$data.filter
+label_Tasic <- OUT$label.filter
+ref.labels <-label_Tasic$label.unlabeled.use.cols...
+ref.mtx <- exp_Tasic
+ref.dataset <- 'Tasic'
+
 ############### import unlabeled data
 ############### Habib
 path.input <- '/home/zy/scRef/summary/'
@@ -103,11 +119,17 @@ df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:len
 ### scRef
 source('/home/zy/my_git/scRef/main/scRef.v12.R')
 setwd('~/my_git/scRef')
-result.scref <- SCREF(exp_sc_mat, exp_ref_mat,
-                      type_ref = 'sum-counts', use.RUVseq = T, 
+# result.scref <- SCREF(exp_sc_mat, exp_ref_mat,
+#                       type_ref = 'sum-counts', use.RUVseq = T, 
+#                       cluster.speed = T, cluster.cell = 10,
+#                       min_cell = 10, CPU = 8)
+result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
+                      type_ref = 'sc-counts', use.RUVseq = T, 
+                      # method1 = 'kendall',
                       cluster.speed = T, cluster.cell = 10,
-                      min_cell = 10, CPU = 8)
+                      min_cell = 10, CPU = 8, GMM.ceiling_cutoff = 30)
 pred.scRef <- result.scref$final.out$scRef.tag
+table(label_Habib$label.unlabeled.use.cols..., pred.scRef)
 
 ### UMAP with label
 library(ggplot2)
@@ -136,7 +158,7 @@ seurat.unlabeled@meta.data$scRef.tag <- pred.scRef
 # seurat.unlabeled@meta.data$new.tag <- new.tag
 
 # PCA
-seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75)
+seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75, verbose = F)
 
 # cluster
 # seurat.unlabeled <- FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75, nn.eps = 0.5)
@@ -145,10 +167,41 @@ seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 75)
 # UMAP
 seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:20, n.neighbors = 30)
 # figure1: ture label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'original.label')
+plot.umap <- DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'original.label')
 # figure2: cluster label
 DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
 # figure3: scRef plus label
-DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'scRef.tag')
+plot.umap.scRef <- DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'scRef.tag')
 
+# umap with label
+# transform character label to index
+labels <- pred.scRef
+vec.labels <- c(setdiff(unique(labels), 'Unassigned'), 'Unassigned')
+df.label.idx <- data.frame(label = vec.labels, idx = c(1:(length(vec.labels) - 1), -1))
+for (j in 1:dim(df.label.idx)[1]) {
+    labels[labels == df.label.idx[j, 'label']] <- df.label.idx[j, 'idx']
+}
 
+# supervised UMAP
+umap <- import('umap')
+class.umap <- umap$UMAP(target_weight = 0)
+mat.pca <- seurat.unlabeled@reductions$pca@cell.embeddings
+embedding <- class.umap$fit_transform(X = mat.pca, y = as.numeric(labels))
+dimnames(embedding)[[1]] <- dimnames(mat.pca)[[1]]
+umap.label <- CreateDimReducObject(embeddings = embedding, key = 'UMAP_')
+seurat.unlabeled@reductions$umap.label <- umap.label
+
+plot.umap.label.scRef <- DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'scRef.tag')
+
+plot.umap.label <- DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'original.label')
+
+library(ggplot2)
+pathout <- '/home/zy/scRef/figure'
+ggsave(plot = plot.umap, path = pathout, filename = 'umap.png', 
+       units = 'cm', height = 23, width = 30)
+ggsave(plot = plot.umap.scRef, path = pathout, filename = 'umap_scRef.png', 
+       units = 'cm', height = 24, width = 33)
+ggsave(plot = plot.umap.label, path = pathout, filename = 'umap_label.png', 
+       units = 'cm', height = 23, width = 30)
+ggsave(plot = plot.umap.label.scRef, path = pathout, filename = 'umap_label_scRef.png', 
+       units = 'cm', height = 24, width = 33)

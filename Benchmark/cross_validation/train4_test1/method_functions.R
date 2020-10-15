@@ -712,7 +712,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
     #                               scRef                                     #
     #############################################################################
     # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
-    source('/home/zy/my_git/scRef/main/scRef.v12.R')
+    source('/home/zy/my_git/scRef/main/scRef.v14.R')
     True_Labels_scRef <- list()
     Pred_Labels_scRef <- list()
     Total_Time_scRef <- list()
@@ -739,15 +739,14 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
                 train_label,
                 type_ref = 'sc-counts',
                 method1 = 'spearman', method2 = 'multinomial',
-                # out.group = 'MCA',
-                out.group = 'HCA',
-                # use.RUVseq = T,
-                cluster.speed = F,
+                out.group = 'MCA',
+                # out.group = 'HCA',
+                use.RUVseq = T,
+                cluster.speed = T,
                 # corr_use_HVGene = T,
-                cluster.resolution = 2,
-                cluster.cell = 10,
-                min_cell = 1,
-                GMM.ceiling_cutoff = 15,
+                cluster.resolution = 3,
+                cluster.cell = 5,
+                min_cell = 10,
                 CPU = 4
             )
             label.scRef <- as.character(result.scref$final.out$scRef.tag)
