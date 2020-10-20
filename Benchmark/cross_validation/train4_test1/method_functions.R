@@ -70,9 +70,9 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
           cluster.cell = 5,
           min_cell = 1,
           GMM.num_cluster = NULL,
-          threshold.recall = 0.4,
+          threshold.recall = 0.5,
           GMM.ceiling_cutoff = 30,
-          CPU = 4
+          CPU = 8
       )
       # result.scref <- SCREF(
       #   test_set,

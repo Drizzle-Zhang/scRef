@@ -1093,7 +1093,7 @@
 .cutoff_GMM_add_neg <- function(df.tags.in, num_cluster = 6, cutoff.neg = 3, 
                                 cutoff.pos = 5, ceiling.cutoff = 20, opt.strict = T) {
     library(mclust, verbose = F)
-    cells <- unique(df.tags.in$scRef.tag)
+    cells <- as.character(unique(df.tags.in$scRef.tag))
     vec.cutoff <- c()
     vec.neg.cutoff <- c()
     for (i in 1:length(cells)) {
