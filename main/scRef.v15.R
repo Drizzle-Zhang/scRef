@@ -1242,7 +1242,8 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     # get sum-counts format
     if (type_ref == 'sc-counts') {
         print('Sum single cell counts matrix:')
-        label.in <- data.frame(cell_id = colnames(exp_ref_mat), tag = exp_ref_label)
+        label.in <- data.frame(cell_id = colnames(exp_ref_mat), 
+                               tag = as.character(exp_ref_label))
         exp_ref_mat.sum <- .generate_ref(exp_ref_mat, label.in, M='SUM')
         exp_ref_mat <- exp_ref_mat.sum
         type_ref <- 'sum-counts'
