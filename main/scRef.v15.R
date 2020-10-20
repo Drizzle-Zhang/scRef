@@ -623,12 +623,13 @@
 
 
 .find_markers_auto_add_neg <- function(exp_ref_mat, seurat.out.group, list.localNeg = NULL,
-                               type_ref = 'sum-counts', use.RUVseq = T, topN = 100) {
+                                       type_ref = 'sum-counts', use.RUVseq = T, 
+                                       base.topN = 50, percent.high.exp = 0.8) {
     library(parallel, verbose = F)
     library(Seurat, verbose = F)
     # check parameters
-    if (!is.null(topN)) {
-        topN <- topN
+    if (!is.null(base.topN)) {
+        base.topN <- base.topN
     } else {
         stop('Error in finding markers: provide incorrect parameters')
     }
@@ -677,15 +678,15 @@
     mtx.combat.use <- mtx.combat[, paste0('MCA.', cell.MCA)]
     
     
-    topN <- 50
+    topN <- base.topN
     list.cell.genes <- list()
     for (i in 1:length(cell.ref)) {
         cell <- cell.ref[i]
         # print(cell)
         vec.cell <- mtx.combat[, paste0('Ref.', cell)]
-        vec.cell.high <- vec.cell[vec.cell > quantile(vec.cell, 0.7)]
+        vec.cell.high <- vec.cell[vec.cell > quantile(vec.cell, percent.high.exp)]
         vec.ref <- exp_ref_mat[, cell]
-        vec.ref.high <- vec.ref[vec.ref > quantile(vec.ref, 0.7)]
+        vec.ref.high <- vec.ref[vec.ref > quantile(vec.ref, percent.high.exp)]
         # high expression genes
         genes.high <- intersect(names(vec.cell.high), names(vec.ref.high))
         # diff in reference
@@ -1104,9 +1105,13 @@
             vec.neg.cutoff <- c(vec.neg.cutoff, neg.cutoff)
             next()
         }
-        model <- densityMclust(df.sub$log10Pval, 
-                               G = min(num_cluster, length(unique(df.sub$log10Pval))-2), 
-                               verbose = F)
+        if (is.null(num_cluster)) {
+            model <- densityMclust(df.sub$log10Pval, verbose = F)
+        } else {
+            model <- densityMclust(df.sub$log10Pval, 
+                                   G = min(num_cluster, length(unique(df.sub$log10Pval))-2), 
+                                   verbose = F)
+        }
         cluster.mean <- model$parameters$mean
         names(cluster.mean) <- as.character(1:length(cluster.mean))
         cluster.sd <- sqrt(model$parameters$variance$sigmasq)
@@ -1137,6 +1142,21 @@
         all.clusters <- names(cluster.mean)
         cluster.unknown <- names(cluster.mean[cluster.mean < cutoff.pos])
         cluster.known <- setdiff(all.clusters, cluster.unknown)
+        cluster.final <- c(cluster.known[length(cluster.known)])
+        if (length(cluster.known) > 1) {
+            for (j in rev(1:(length(cluster.known) - 1))) {
+                cluster <- cluster.known[j]
+                logp.j.right <- cluster.mean[cluster] + 15
+                known.left <- cluster.mean[cluster.known[j+1]]
+                if (logp.j.right >= known.left) {
+                    cluster.final <- c(cluster.final, cluster)
+                } else {
+                    break()
+                }
+            }
+        }
+        cluster.known <- rev(cluster.final)
+        
         if (length(cluster.known) == 0) {
             vec.cutoff <- c(vec.cutoff, ceiling.cutoff)
             next()
@@ -1158,6 +1178,7 @@
     out.cutoff$vec.cutoff <- vec.cutoff
     out.cutoff$vec.neg.cutoff <- vec.neg.cutoff
     return(out.cutoff)
+    
 }
 
 
@@ -1201,7 +1222,7 @@
 
 SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL, 
                   identify_unassigned = T, single_round = F, corr_use_HVGene = T,
-                  type_ref = 'sc-counts', out.group = 'MCA', use.RUVseq = T, topN = 100, 
+                  type_ref = 'sc-counts', out.group = 'MCA', use.RUVseq = T, topN = 50, 
                   cluster.num.pc =50, cluster.resolution = 3, 
                   cluster.speed = T, cluster.cell = 10,
                   method1 = 'kendall', method2 = 'multinomial', 
@@ -1242,7 +1263,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         print('Find marker genes of cell types in reference:')
         out.markers <-
             .find_markers_auto_add_neg(exp_ref_mat, seurat.out.group, 
-                                 type_ref = type_ref, use.RUVseq = use.RUVseq, topN = topN)
+                                 type_ref = type_ref, use.RUVseq = use.RUVseq, base.topN = topN)
         list.cell.genes <- out.markers[['list.cell.genes']]
         genes.ref <- dimnames(out.markers[['exp_ref_mat']])[[1]]
         
@@ -1299,19 +1320,13 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     
     gc()
     
-    tag1.first <- .get_tag_max(out1)
+    tag1 <- .get_tag_max(out1)
 
     if (identify_unassigned) {
         print('Build local reference')
-        df.tags1.first <- .confirm_label(df.exp.merge, list.cell.genes, tag1.first, CPU = CPU)
-        tag1.second <- .get_tag_second(out1)
-        df.tags1.second <- .confirm_label(df.exp.merge, list.cell.genes, tag1.second, CPU = CPU)
-        out.combine1 <- .combine_tags(df.tags1.first, df.tags1.second)
-        df.tags1 <- out.combine1$tag.final
-        df.tags1$log10Pval <- -log10(df.tags1$pvalue)
+        df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
         cell_ids <- colnames(df.exp.merge)
         df.tags1 <- df.tags1[cell_ids, ]
-        tag1 <- data.frame(cell_id = row.names(df.tags1), tag = df.tags1$scRef.tag)
         
         # select cutoff.1 automatitically
         if (cutoff.1 == 'default') {
@@ -1484,8 +1499,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
             return(output)
             
         }
-        LocalRef <- .generate_ref(df.exp.merge, tag1.first, min_cell = min_cell)
-        tag1 <- tag1.first
+        LocalRef <- .generate_ref(df.exp.merge, tag1, min_cell = min_cell)
     }
     print('Cell types in local reference:')
     print(dimnames(LocalRef)[[2]])
@@ -1497,7 +1511,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         # find local marker genes
         print('find local marker genes')
         out.markers <- .find_markers_auto_add_neg(LocalRef, seurat.out.group, list.localNeg = list.localNeg,
-                                          use.RUVseq = use.RUVseq, topN = topN)
+                                          use.RUVseq = use.RUVseq, base.topN = topN)
         local.cell.genes <- out.markers[['list.cell.genes']]
     }
     
@@ -1516,19 +1530,13 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     } else {
         out2 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
     }
-    tag2.first <- .get_tag_max(out2)
+    tag2 <- .get_tag_max(out2)
     gc()
     
     if (identify_unassigned) {
-        df.tags2.first <- .confirm_label(df.exp.merge, local.cell.genes, tag2.first, CPU = CPU)
-        tag2.second <- .get_tag_second(out2)
-        df.tags2.second <- .confirm_label(df.exp.merge, local.cell.genes, tag2.second, CPU = CPU)
-        out.combine2 <- .combine_tags(df.tags2.first, df.tags2.second)
-        df.tags2 <- out.combine2$tag.final
-        df.tags2$log10Pval <- -log10(df.tags2$pvalue)
+        df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
         cell_ids <- colnames(df.exp.merge)
         df.tags2 <- df.tags2[cell_ids, ]
-        tag2 <- data.frame(cell_id = row.names(df.tags2), tag = df.tags2$scRef.tag)
         gc()
 
         print('Combine reference and local result:')
@@ -1634,8 +1642,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         df.tags <- df.tags[cell_ids, ]
         
     } else {
-        df.combine <- as.data.frame(tag2.first)
-        tag2 <- tag2.first
+        df.combine <- as.data.frame(tag2)
         row.names(df.combine) <- df.combine$cell_id
         df.combine$cell_id <- NULL
         names(df.combine) <- 'scRef.tag'

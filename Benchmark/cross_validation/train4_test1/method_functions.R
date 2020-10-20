@@ -1,3 +1,143 @@
+run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
+                    GeneOrderPath = NULL,NumGenes = NULL){
+  "
+  run scRef
+  Wrapper script to run scPred on a benchmark dataset with 5-fold cross validation,
+  outputs lists of true and predicted cell labels as csv files, as well as computation time.
+  
+  Parameters
+  ----------
+  DataPath : Data file path (.tsv), cells-genes matrix with cell unique barcodes 
+  as row names and gene names as column names.
+  LabelsPath : Cell population annotations file path (.tsv).
+  CV_RDataPath : Cross validation RData file path (.RData), obtained from Cross_Validation.R function.
+  OutputDir : Output directory defining the path of the exported file.
+  GeneOrderPath : Gene order file path (.csv) obtained from feature selection, 
+  defining the genes order for each cross validation fold, default is NULL.
+  NumGenes : Number of genes used in case of feature selection (integer), default is NULL.
+  "
+  
+  library(stringr)
+  INPUT <- readRDS(DataPath)
+  Data <- INPUT$data.filter
+  Labels <- INPUT$label.filter
+  Labels <- Labels[, 1]
+  # Data <- read.delim(DataPath,row.names = 1)
+  # Labels <- as.matrix(read.delim(LabelsPath, row.names = 1))
+  load(CV_RDataPath)
+  Data <- Data[Cells_to_Keep, ]
+  colnames(Data) <- str_replace_all(colnames(Data), '_', '.')
+  colnames(Data) <- str_replace_all(colnames(Data), '-', '.')
+  Labels <- Labels[Cells_to_Keep]
+  if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
+    GenesOrder = read.csv(GeneOrderPath)
+  }
+  
+  #############################################################################
+  #                               scRef                                     #
+  #############################################################################
+  # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
+  source('/home/zy/my_git/scRef/main/scRef.v15.R')
+  True_Labels_scRef <- list()
+  Pred_Labels_scRef <- list()
+  Total_Time_scRef <- list()
+  
+  for (i in c(1:n_folds)) {
+    train_data <- Data[, Train_Idx[[i]]]
+    train_label <- Labels[Train_Idx[[i]]]
+    # train_set <- .generate_ref(train_data, train_label)
+    test_set <- Data[, Test_Idx[[i]]]
+    if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
+      start_time <- Sys.time()
+      # scRef = scRef(method = "single", Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]],
+      #                   Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]],
+      #                   Labels[Train_Idx[[i]]], numCores = 1)
+      end_time <- Sys.time()
+    } else {
+      start_time <- Sys.time()
+      setwd('~/my_git/scRef')
+      result.scref <- SCREF(
+          test_set,
+          train_data,
+          train_label,
+          type_ref = 'sc-counts',
+          method1 = 'kendall', method2 = 'multinomial',
+          out.group = 'MCA',
+          use.RUVseq = T,
+          cluster.speed = T,
+          # corr_use_HVGene = T,
+          cluster.resolution = 0.8,
+          cluster.cell = 5,
+          min_cell = 1,
+          GMM.num_cluster = NULL,
+          threshold.recall = 0.4,
+          GMM.ceiling_cutoff = 30,
+          CPU = 4
+      )
+      # result.scref <- SCREF(
+      #   test_set,
+      #   train_data,
+      #   train_label,
+      #   type_ref = 'sc-counts',
+      #   method1 = 'spearman', method2 = 'multinomial',
+      #   out.group = 'HCA',
+      #   use.RUVseq = T,
+      #   cluster.speed = F,
+      #   # corr_use_HVGene = T,
+      #   cluster.resolution = 0.8,
+      #   cluster.cell = 5,
+      #   min_cell = 1,
+      #   GMM.num_cluster = NULL,
+      #   threshold.recall = 0.4,
+      #   CPU = 10
+      # )
+      label.scRef <- as.character(result.scref$final.out$scRef.tag)
+      # table(Labels[Test_Idx[[i]]], label.scRef)
+      # df.label <- data.frame(labels = Labels[Test_Idx[[i]]], row.names = colnames(test_set))
+      # df.view <- merge(df.label, result.scref$combine.out, by = 'row.names')
+      # df.tags1 <- result.scref$pvalue1
+      # df.sub <- df.tags1[df.tags1$scRef.tag == 'Ependymocytes', ]
+      # library(ggplot2)
+      # ggplot(df.sub, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
+      # model <- densityMclust(df.sub$log10Pval)
+      # summary(model, parameters = T)
+      end_time <- Sys.time()
+    }
+    Total_Time_scRef[i] <- as.numeric(difftime(end_time, start_time, units = 'secs'))
+    
+    True_Labels_scRef[i] <- list(Labels[Test_Idx[[i]]])
+    Pred_Labels_scRef[i] <- list(label.scRef)
+  }
+  True_Labels_scRef <- as.vector(unlist(True_Labels_scRef))
+  Pred_Labels_scRef <- as.vector(unlist(Pred_Labels_scRef))
+  Total_Time_scRef <- as.vector(unlist(Total_Time_scRef))
+  
+  setwd(OutputDir)
+  
+  if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
+    write.csv(
+      True_Labels_scRef,
+      paste('scRef_', NumGenes, '_True_Labels.csv', sep = ''),
+      row.names = FALSE
+    )
+    write.csv(
+      Pred_Labels_scRef,
+      paste('scRef_', NumGenes, '_Pred_Labels.csv', sep = ''),
+      row.names = FALSE
+    )
+    write.csv(
+      Total_Time_scRef,
+      paste('scRef_', NumGenes, '_Total_Time.csv', sep = ''),
+      row.names = FALSE
+    )
+  } else{
+    write.csv(True_Labels_scRef, 'scRef_True_Labels.csv', row.names = FALSE)
+    write.csv(Pred_Labels_scRef, 'scRef_Pred_Labels.csv', row.names = FALSE)
+    write.csv(Total_Time_scRef, 'scRef_Total_Time.csv', row.names = FALSE)
+  }
+}
+
+
 run_SingleR<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = NULL,NumGenes = NULL){
     "
   run SingleR
@@ -669,122 +809,6 @@ run_sciBet<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
         write.csv(True_Labels_sciBet, 'sciBet_True_Labels.csv', row.names = FALSE)
         write.csv(Pred_Labels_sciBet, 'sciBet_Pred_Labels.csv', row.names = FALSE)
         write.csv(Total_Time_sciBet, 'sciBet_Total_Time.csv', row.names = FALSE)
-    }
-}
-
-
-run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
-                    GeneOrderPath = NULL,NumGenes = NULL){
-  "
-  run scRef
-  Wrapper script to run scPred on a benchmark dataset with 5-fold cross validation,
-  outputs lists of true and predicted cell labels as csv files, as well as computation time.
-  
-  Parameters
-  ----------
-  DataPath : Data file path (.tsv), cells-genes matrix with cell unique barcodes 
-  as row names and gene names as column names.
-  LabelsPath : Cell population annotations file path (.tsv).
-  CV_RDataPath : Cross validation RData file path (.RData), obtained from Cross_Validation.R function.
-  OutputDir : Output directory defining the path of the exported file.
-  GeneOrderPath : Gene order file path (.csv) obtained from feature selection, 
-  defining the genes order for each cross validation fold, default is NULL.
-  NumGenes : Number of genes used in case of feature selection (integer), default is NULL.
-  "
-  
-    library(stringr)
-    INPUT <- readRDS(DataPath)
-    Data <- INPUT$data.filter
-    Labels <- INPUT$label.filter
-    Labels <- Labels[, 1]
-    # Data <- read.delim(DataPath,row.names = 1)
-    # Labels <- as.matrix(read.delim(LabelsPath, row.names = 1))
-    load(CV_RDataPath)
-    Data <- Data[Cells_to_Keep, ]
-    colnames(Data) <- str_replace_all(colnames(Data), '_', '.')
-    colnames(Data) <- str_replace_all(colnames(Data), '-', '.')
-    Labels <- Labels[Cells_to_Keep]
-    if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
-        GenesOrder = read.csv(GeneOrderPath)
-    }
-    
-    #############################################################################
-    #                               scRef                                     #
-    #############################################################################
-    # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
-    source('/home/zy/my_git/scRef/main/scRef.v14.R')
-    True_Labels_scRef <- list()
-    Pred_Labels_scRef <- list()
-    Total_Time_scRef <- list()
-    
-    for (i in c(1:n_folds)) {
-        train_data <- Data[, Train_Idx[[i]]]
-        train_label <- Labels[Train_Idx[[i]]]
-        # train_set <- .generate_ref(train_data, train_label)
-        test_set <- Data[, Test_Idx[[i]]]
-        if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
-            start_time <- Sys.time()
-            # scRef = scRef(method = "single", Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Test_Idx[[i]]],
-            #                   Data[as.vector(GenesOrder[c(1:NumGenes),i])+1,Train_Idx[[i]]],
-            #                   Labels[Train_Idx[[i]]], numCores = 1)
-            end_time <- Sys.time()
-        } else {
-            start_time <- Sys.time()
-            setwd('~/my_git/scRef')
-            # result.scref = SCREF(test_set, train_data, train_label, type_ref = 'sc-counts',method1 = 'spearman', 
-            #               identify_unassigned = F, corr_use_HVGene = F, CPU = 4, min_cell = 1)
-            result.scref <- SCREF(
-                test_set,
-                train_data,
-                train_label,
-                type_ref = 'sc-counts',
-                method1 = 'spearman', method2 = 'multinomial',
-                out.group = 'MCA',
-                # out.group = 'HCA',
-                use.RUVseq = T,
-                cluster.speed = T,
-                # corr_use_HVGene = T,
-                cluster.resolution = 3,
-                cluster.cell = 5,
-                min_cell = 10,
-                CPU = 4
-            )
-            label.scRef <- as.character(result.scref$final.out$scRef.tag)
-            # df.label <- data.frame(labels = Labels[Test_Idx[[i]]], row.names = colnames(test_set))
-            # df.view <- merge(df.label, result.scref$combine.out, by = 'row.names')
-            end_time <- Sys.time()
-        }
-        Total_Time_scRef[i] <- as.numeric(difftime(end_time, start_time, units = 'secs'))
-        
-        True_Labels_scRef[i] <- list(Labels[Test_Idx[[i]]])
-        Pred_Labels_scRef[i] <- list(label.scRef)
-    }
-    True_Labels_scRef <- as.vector(unlist(True_Labels_scRef))
-    Pred_Labels_scRef <- as.vector(unlist(Pred_Labels_scRef))
-    Total_Time_scRef <- as.vector(unlist(Total_Time_scRef))
-    
-    setwd(OutputDir)
-    
-    if (!is.null(GeneOrderPath) & !is.null(NumGenes)) {
-        write.csv(
-            True_Labels_scRef,
-            paste('scRef_', NumGenes, '_True_Labels.csv', sep = ''),
-            row.names = FALSE
-        )
-        write.csv(
-            Pred_Labels_scRef,
-            paste('scRef_', NumGenes, '_Pred_Labels.csv', sep = ''),
-            row.names = FALSE
-        )
-        write.csv(
-            Total_Time_scRef,
-            paste('scRef_', NumGenes, '_Total_Time.csv', sep = ''),
-            row.names = FALSE
-        )
-    } else{
-        write.csv(True_Labels_scRef, 'scRef_True_Labels.csv', row.names = FALSE)
-        write.csv(Pred_Labels_scRef, 'scRef_Pred_Labels.csv', row.names = FALSE)
-        write.csv(Total_Time_scRef, 'scRef_Total_Time.csv', row.names = FALSE)
     }
 }
 

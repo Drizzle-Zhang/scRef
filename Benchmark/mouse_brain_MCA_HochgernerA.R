@@ -94,8 +94,8 @@ df.mtx <- read.delim(file.mtx, stringsAsFactors = F, row.names = 1)
 file.cellid <- '/home/disk/scRef/MouseAtlas_SingleCell_Han2018/MCA_by_tissue/Brain/CellAssignments_all_batch.txt'
 df.cellid <- read.delim(file.cellid, stringsAsFactors = F, row.names = 1)
 df.labels <- df.cellid[colnames(df.mtx),]
-# ref.labels <- df.labels$CellType[df.labels$CellType != 'Pan-GABAergic']
-# ref.mtx <- df.mtx[, df.labels$CellType != 'Pan-GABAergic']
+ref.labels <- df.labels$CellType[df.labels$CellType != 'Pan-GABAergic']
+ref.mtx <- df.mtx[, df.labels$CellType != 'Pan-GABAergic']
 ref.labels <- df.labels$CellType
 ref.mtx <- df.mtx
 ref.dataset <- 'MCA'

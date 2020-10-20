@@ -4,59 +4,30 @@ source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/cross_validation/train4_test1/Campbell/'
-
-# setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
-# source('./Cross_Validation.R')
-# source('./method_functions.R')
-# source('./evaluate.R')
-# 
-# path.input <- '/home/drizzle_zhang/scRef/'
-# path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
+path.output <- '/home/zy/scRef/cross_validation/train4_test1/stxBrain/'
+if (!dir.exists(path.output)) {
+    dir.create(path.output)
+}
 
 # filter data
-dataset <- 'Campbell'
+dataset <- 'stxBrain'
 DataPath <- paste0(path.output, dataset, '.Rdata')
 OutputDir <- path.output
-# # function of data preparation
-# prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
-#                          del.label = c('miss')) {
-#     library(stringr)
-#     data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-#     data.unlabeled <- floor(data.unlabeled)
-#     names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-#     names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-#     # read label file
-#     file.label.unlabeled <- file.label.unlabeled
-#     label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-#     row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-#     row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-#     col.name1 <- names(data.unlabeled)[1]
-#     if (substring(col.name1, 1, 1) == 'X') {
-#         row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-#     }
-#     # filter data
-#     use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-#     data.filter <- data.unlabeled[,use.cols]
-#     label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-# 
-#     OUT <- list()
-#     OUT$data.filter <- data.filter
-#     OUT$label.filter <- label.filter
-#     return(OUT)
-# 
-# }
-# file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-# file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-# saveRDS(OUT, file = DataPath)
+
+library(Seurat)
+library(SeuratData)
+data(ssHippo)
+OUT <- list()
+OUT$data.filter <- as.matrix(pbmcsca@assays$RNA@counts[, pbmcsca$Method == '10x Chromium (v2)'])
+OUT$label.filter <- data.frame(annotations = as.character(pbmcsca$CellType)[pbmcsca$Method == '10x Chromium (v2)'],
+                               row.names = colnames(OUT$data.filter))
+saveRDS(OUT, file = DataPath)
 
 # generate cross validation dataset
-# OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-# label.filter <- OUT$label.filter
-# LabelsPath <- paste0(path.input, 'Habib_label.txt')
-# write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
-# Cross_Validation(LabelsPath, OutputDir)
+label.filter <- OUT$label.filter
+LabelsPath <- paste0(path.output, dataset, '_label.txt')
+write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
+Cross_Validation(LabelsPath, OutputDir)
 
 CV_RDataPath <- paste0(path.output, 'CV_folds.RData')
 

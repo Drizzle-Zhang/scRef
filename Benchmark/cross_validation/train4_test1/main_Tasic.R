@@ -4,7 +4,7 @@ source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/cross_validation/train4_test1/Campbell/'
+path.output <- '/home/zy/scRef/cross_validation/train4_test1/Tasic/'
 
 # setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
 # source('./Cross_Validation.R')
@@ -15,7 +15,7 @@ path.output <- '/home/zy/scRef/cross_validation/train4_test1/Campbell/'
 # path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
 
 # filter data
-dataset <- 'Campbell'
+dataset <- 'Tasic'
 DataPath <- paste0(path.output, dataset, '.Rdata')
 OutputDir <- path.output
 # # function of data preparation
@@ -48,10 +48,10 @@ OutputDir <- path.output
 # }
 # file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
 # file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
 # saveRDS(OUT, file = DataPath)
-
-# generate cross validation dataset
+# 
+# # generate cross validation dataset
 # OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 # label.filter <- OUT$label.filter
 # LabelsPath <- paste0(path.input, 'Habib_label.txt')

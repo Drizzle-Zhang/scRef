@@ -14,19 +14,18 @@ dataset <- 'cbmc'
 DataPath <- paste0(path.output, dataset, '.Rdata')
 OutputDir <- path.output
 
-# library(SeuratData)
-# data('cbmc')
-# OUT <- list()
-# OUT$data.filter <- as.matrix(cbmc@assays$RNA@counts)
-# OUT$label.filter <- data.frame(annotations = as.character(cbmc$rna_annotations),
-#                                row.names = colnames(OUT$data.filter))
-# saveRDS(OUT, file = DataPath)
-# 
-# # generate cross validation dataset
-# label.filter <- OUT$label.filter
-# LabelsPath <- paste0(path.output, dataset, '_label.txt')
-# write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
-# Cross_Validation(LabelsPath, OutputDir)
+library(SeuratData)
+data('cbmc')
+OUT <- list()
+OUT$label.filter <- data.frame(annotations = as.character(cbmc$rna_annotations),
+                               row.names = colnames(OUT$data.filter))
+saveRDS(OUT, file = DataPath)
+
+# generate cross validation dataset
+label.filter <- OUT$label.filter
+LabelsPath <- paste0(path.output, dataset, '_label.txt')
+write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
+Cross_Validation(LabelsPath, OutputDir)
 
 CV_RDataPath <- paste0(path.output, 'CV_folds.RData')
 
@@ -52,6 +51,26 @@ run_scClassify(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 
 # heatmap
 df.heatmap <- data.frame(stringsAsFactors = F)
+
+# scRef
+# run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
+PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
+res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
+df.sub <- data.frame(term = names(res.scRef$F1), 
+                     method = rep('scRef', length(res.scRef$F1)),
+                     value = res.scRef$F1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'macro F1', method = 'scRef',
+                           value = res.scRef$Mean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scRef',
+                           value = res.scRef$Acc, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Weighted macro F1', method = 'scRef',
+                           value = res.scRef$WMean_F1, stringsAsFactors = F))
+df.heatmap <- rbind(df.heatmap, df.sub)
 
 # SingleR
 # run_SingleR(DataPath,LabelsPath,CV_RDataPath,OutputDir)
@@ -165,26 +184,6 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'sciBet',
                            value = res.sciBet$WMean_F1, stringsAsFactors = F))
-df.heatmap <- rbind(df.heatmap, df.sub)
-
-# scRef
-# run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
-TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
-PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
-res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
-df.sub <- data.frame(term = names(res.scRef$F1), 
-                     method = rep('scRef', length(res.scRef$F1)),
-                     value = res.scRef$F1, stringsAsFactors = F)
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'macro F1', method = 'scRef',
-                           value = res.scRef$Mean_F1, stringsAsFactors = F))
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'scRef',
-                           value = res.scRef$Acc, stringsAsFactors = F))
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'Weighted macro F1', method = 'scRef',
-                           value = res.scRef$WMean_F1, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # singleCellNet

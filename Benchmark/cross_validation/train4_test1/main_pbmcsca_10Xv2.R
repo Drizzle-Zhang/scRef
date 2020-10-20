@@ -54,6 +54,26 @@ run_scClassify(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 # heatmap
 df.heatmap <- data.frame(stringsAsFactors = F)
 
+# scRef
+# run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
+TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
+PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
+res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
+df.sub <- data.frame(term = names(res.scRef$F1), 
+                     method = rep('scRef', length(res.scRef$F1)),
+                     value = res.scRef$F1, stringsAsFactors = F)
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'macro F1', method = 'scRef',
+                           value = res.scRef$Mean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy', method = 'scRef',
+                           value = res.scRef$Acc, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Weighted macro F1', method = 'scRef',
+                           value = res.scRef$WMean_F1, stringsAsFactors = F))
+df.heatmap <- rbind(df.heatmap, df.sub)
+
 # SingleR
 # run_SingleR(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'SingleR_True_Labels.csv')
@@ -168,26 +188,6 @@ df.sub <- rbind(df.sub,
                            value = res.sciBet$WMean_F1, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
-# scRef
-# run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
-TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
-PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
-res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
-df.sub <- data.frame(term = names(res.scRef$F1), 
-                     method = rep('scRef', length(res.scRef$F1)),
-                     value = res.scRef$F1, stringsAsFactors = F)
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'macro F1', method = 'scRef',
-                           value = res.scRef$Mean_F1, stringsAsFactors = F))
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'scRef',
-                           value = res.scRef$Acc, stringsAsFactors = F))
-df.sub <- rbind(df.sub, 
-                data.frame(term = 'Weighted macro F1', method = 'scRef',
-                           value = res.scRef$WMean_F1, stringsAsFactors = F))
-df.heatmap <- rbind(df.heatmap, df.sub)
-
 # singleCellNet
 # run_singleCellNet(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'singleCellNet_True_Labels.csv')
@@ -263,7 +263,7 @@ df.heatmap <- rbind(df.heatmap, df.sub)
 
 unique.term <- unique(df.heatmap$term)
 df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
-df.acc <- df.heatmap[df.heatmap$term == 'macro F1', ]
+df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
