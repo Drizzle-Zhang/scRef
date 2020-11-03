@@ -41,7 +41,8 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
         scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
             df.cell.names[j, 'sc.name']
     }
-
+    scRef.tag[!(scRef.tag %in% df.cell.names$sc.name)] <- 'Unassigned'
+    
     true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
     true.labels <- unique(true.tag)
     our.tag <- scRef.tag
@@ -84,7 +85,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v12.R')
+source('/home/zy/my_git/scRef/main/scRef.v18.R')
 
 ############# regard sc-counts data as reference
 path.input <- '/home/zy/scRef/sc_data/'
@@ -112,20 +113,22 @@ dataset <- 'Mizrak'
 # mtx.rep1 <- read.delim(file.mtx.rep1, header = F, stringsAsFactors = F)
 # file.cellid.rep1 <- paste0(path.input, dataset, '/GSE109447_29319_cells_id_repinfo.txt')
 # df.cellid <- read.table(file.cellid.rep1, stringsAsFactors = F, sep = '\t')
-# df.cellid <- str_replace_all(df.cellid, '_', '.')
+# df.cellid <- str_replace_all(df.cellid$V1, '_', '.')
 # df.cellid <- str_replace_all(df.cellid, '-', '.')
 # file.cells.rep1 <- paste0(path.input, dataset, '/GSE109447_Rep1_29319cells_Basic.txt')
 # df.cells <- read.table(file.cells.rep1, stringsAsFactors = F, sep = '\t')
+# vec.cells <- df.cells[df.cells$V1 != 'Doublet', 'V1']
+# vec.cellid <- df.cellid[df.cells$V1 != 'Doublet']
 # 
-# data.unlabeled <- mtx.rep1
+# data.unlabeled <- mtx.rep1[,df.cells$V1 != 'Doublet']
 # data.genes <- data.unlabeled[, 'V2']
 # data.unlabeled[, 'V1'] <- NULL
 # data.unlabeled[, 'V2'] <- NULL
 # data.unlabeled <- as.matrix(data.unlabeled)
 # rownames(data.unlabeled) <- data.genes
-# colnames(data.unlabeled) <- df.cellid$V1
+# colnames(data.unlabeled) <- vec.cellid
 # # read label file
-# label.unlabeled <- data.frame(Cluster = df.cells$V1, row.names = df.cellid$V1)
+# label.unlabeled <- data.frame(Cluster = vec.cells, row.names = vec.cellid)
 # 
 # OUT <- list()
 # OUT$data.filter <- data.unlabeled
@@ -150,7 +153,7 @@ df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:len
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v12.R')
+source('/home/zy/my_git/scRef/main/scRef.v18.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
@@ -309,6 +312,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scRef',
                            value = res.scRef$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scRef',
+                           value = res.scRef$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scRef',
+                           value = res.scRef$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
@@ -322,6 +331,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'sciBet',
                            value = res.sciBet$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'sciBet',
+                           value = res.sciBet$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'sciBet',
+                           value = res.sciBet$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
@@ -335,6 +350,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'singleCellNet',
                            value = res.singleCellNet$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'singleCellNet',
+                           value = res.singleCellNet$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'singleCellNet',
+                           value = res.singleCellNet$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
@@ -348,6 +369,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'singleR',
                            value = res.singleR$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'singleR',
+                           value = res.singleR$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'singleR',
+                           value = res.singleR$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
@@ -361,6 +388,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scmap-cluster',
                            value = res.scmap.cluster$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scmap-cluster',
+                           value = res.scmap.cluster$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scmap-cluster',
+                           value = res.scmap.cluster$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
@@ -374,6 +407,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scmap-cell',
                            value = res.scmap.cell$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scmap-cell',
+                           value = res.scmap.cell$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scmap-cell',
+                           value = res.scmap.cell$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
@@ -387,6 +426,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'CHETAH',
                            value = res.CHETAH$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'CHETAH',
+                           value = res.CHETAH$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'CHETAH',
+                           value = res.CHETAH$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
@@ -400,6 +445,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scPred',
                            value = res.scPred$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scPred',
+                           value = res.scPred$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scPred',
+                           value = res.scPred$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
@@ -413,6 +464,12 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scID',
                            value = res.scID$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scID',
+                           value = res.scID$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scID',
+                           value = res.scID$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
@@ -426,12 +483,22 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Accuracy', method = 'scClassify',
                            value = res.scClassify$accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scClassify',
+                           value = res.scClassify$accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scClassify',
+                           value = res.scClassify$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 # sort
 df.acc <- df.plot[df.plot$term == 'Accuracy', ]
 df.plot$method <- factor(df.plot$method, 
-                            levels = df.acc$method[order(df.acc$value, decreasing = T)])
+                         levels = df.acc$method[order(df.acc$value, decreasing = T)])
+
+# save results
+file.res <- paste0(path.output, 'results_', ref.dataset, '_', dataset, '.txt')
+write.table(df.plot, file = file.res, sep = '\t')
 
 
 library(ggplot2)
@@ -448,5 +515,5 @@ plot.bar <- ggplot(df.plot,
           axis.title = element_text(size = 12)) 
 ggsave(filename = paste0(ref.dataset, '_', dataset, '.png'), 
        path = path.output, plot = plot.bar,
-       units = 'cm', height = 12, width = 18)
+       units = 'cm', height = 12, width = 24)
 

@@ -182,6 +182,8 @@ for (j in 1:dim(df.label.idx)[1]) {
     labels[labels == df.label.idx[j, 'label']] <- df.label.idx[j, 'idx']
 }
 
+labels <- as.factor(label_Habib[use.cells,])
+
 # supervised UMAP
 umap <- import('umap')
 class.umap <- umap$UMAP(target_weight = 0)

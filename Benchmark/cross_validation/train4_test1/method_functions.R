@@ -37,7 +37,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   #                               scRef                                     #
   #############################################################################
   # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
-  source('/home/zy/my_git/scRef/main/scRef.v15.R')
+  source('/home/zy/my_git/scRef/main/scRef.v16.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
@@ -56,51 +56,56 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
     } else {
       start_time <- Sys.time()
       setwd('~/my_git/scRef')
-      result.scref <- SCREF(
-          test_set,
-          train_data,
-          train_label,
-          type_ref = 'sc-counts',
-          method1 = 'kendall', method2 = 'multinomial',
-          out.group = 'MCA',
-          use.RUVseq = T,
-          cluster.speed = T,
-          # corr_use_HVGene = T,
-          cluster.resolution = 0.8,
-          cluster.cell = 5,
-          min_cell = 1,
-          GMM.num_cluster = NULL,
-          threshold.recall = 0.5,
-          GMM.ceiling_cutoff = 30,
-          CPU = 8
-      )
       # result.scref <- SCREF(
-      #   test_set,
-      #   train_data,
-      #   train_label,
-      #   type_ref = 'sc-counts',
-      #   method1 = 'spearman', method2 = 'multinomial',
-      #   out.group = 'HCA',
-      #   use.RUVseq = T,
-      #   cluster.speed = F,
-      #   # corr_use_HVGene = T,
-      #   cluster.resolution = 0.8,
-      #   cluster.cell = 5,
-      #   min_cell = 1,
-      #   GMM.num_cluster = NULL,
-      #   threshold.recall = 0.4,
-      #   CPU = 10
+      #     test_set,
+      #     train_data,
+      #     train_label,
+      #     type_ref = 'sc-counts',
+      #     method1 = 'kendall', method2 = 'multinomial',
+      #     out.group = 'MCA',
+      #     use.RUVseq = T,
+      #     cluster.speed = T,
+      #     # cluster.resolution = 0.8,
+      #     cluster.cell = 5,
+      #     min_cell = 1,
+      #     GMM.num_cluster = NULL,
+      #     threshold.recall = 0.3,
+      #     CPU = 8
       # )
+      result.scref <- SCREF(
+        test_set,
+        train_data,
+        train_label,
+        type_ref = 'sc-counts',
+        method1 = 'spearman', method2 = 'multinomial',
+        out.group = 'HCA',
+        use.RUVseq = T,
+        cluster.speed = F,
+        # corr_use_HVGene = T,
+        cluster.resolution = 1,
+        # cluster.cell = 5,
+        min_cell = 1,
+        GMM.num_cluster = NULL,
+        threshold.recall = 0.2,
+        CPU = 10
+      )
       label.scRef <- as.character(result.scref$final.out$scRef.tag)
-      # table(Labels[Test_Idx[[i]]], label.scRef)
-      # df.label <- data.frame(labels = Labels[Test_Idx[[i]]], row.names = colnames(test_set))
-      # df.view <- merge(df.label, result.scref$combine.out, by = 'row.names')
-      # df.tags1 <- result.scref$pvalue1
-      # df.sub <- df.tags1[df.tags1$scRef.tag == 'Ependymocytes', ]
-      # library(ggplot2)
-      # ggplot(df.sub, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
-      # model <- densityMclust(df.sub$log10Pval)
-      # summary(model, parameters = T)
+      table(Labels[Test_Idx[[i]]], label.scRef)
+      df.label <- data.frame(labels = Labels[Test_Idx[[i]]], row.names = colnames(test_set))
+      df.view <- merge(df.label, result.scref$combine.out, by = 'row.names')
+      View(df.view)
+      df.tags1 <- result.scref$pvalue1
+      df.sub <- df.tags1[df.tags1$scRef.tag == 'Cytotoxic T cell', ]
+      library(ggplot2)
+      ggplot(df.sub, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
+      model <- densityMclust(df.sub$log10Pval)
+      summary(model, parameters = T)
+      df.tags <- result.scref$combine.out
+      df.sub <- df.tags[df.tags$scRef.tag.12 == 'beta', ]
+      library(ggplot2)
+      ggplot(df.sub, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
+      model <- densityMclust(df.sub$log10Pval, G=6)
+      summary(model, parameters = T)
       end_time <- Sys.time()
     }
     Total_Time_scRef[i] <- as.numeric(difftime(end_time, start_time, units = 'secs'))

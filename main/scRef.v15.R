@@ -1142,6 +1142,7 @@
         all.clusters <- names(cluster.mean)
         cluster.unknown <- names(cluster.mean[cluster.mean < cutoff.pos])
         cluster.known <- setdiff(all.clusters, cluster.unknown)
+        # if (opt.strict) {}
         cluster.final <- c(cluster.known[length(cluster.known)])
         if (length(cluster.known) > 1) {
             for (j in rev(1:(length(cluster.known) - 1))) {
@@ -1227,7 +1228,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
                   cluster.speed = T, cluster.cell = 10,
                   method1 = 'kendall', method2 = 'multinomial', 
                   # cutoff.1 = 'default', cutoff.2 = 'default', 
-                  GMM.num_cluster = 6, GMM.neg_cutoff = 5, GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 20,
+                  GMM.num_cluster = NULL, GMM.neg_cutoff = 5, GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 20,
                   threshold.recall = 0.1,
                   min_cell = 20, CPU = 4) {
     library(parallel, verbose = F)

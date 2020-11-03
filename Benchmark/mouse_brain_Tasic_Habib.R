@@ -41,6 +41,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
         scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
             df.cell.names[j, 'sc.name']
     }
+    scRef.tag[!(scRef.tag %in% df.cell.names$sc.name)] <- 'Unassigned'
     
     true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
     true.labels <- unique(true.tag)
@@ -84,7 +85,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v14.R')
+source('/home/zy/my_git/scRef/main/scRef.v18.R')
 
 ############# regard sc-counts data as reference
 path.input <- '/home/zy/scRef/summary/'
@@ -127,7 +128,7 @@ df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:len
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v14.R')
+source('/home/zy/my_git/scRef/main/scRef.v18.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
@@ -469,6 +470,10 @@ df.plot <- rbind(df.plot, df.sub)
 df.acc <- df.plot[df.plot$term == 'Accuracy', ]
 df.plot$method <- factor(df.plot$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
+
+# save results
+file.res <- paste0(path.output, 'results_', ref.dataset, '_', dataset, '.txt')
+write.table(df.plot, file = file.res, sep = '\t')
 
 
 library(ggplot2)

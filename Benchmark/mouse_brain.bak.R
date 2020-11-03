@@ -88,9 +88,9 @@ library(mclust)
 sub.astrocyte <- df.tags[df.tags$scRef.tag.12 == 'Astrocyte', ]
 sub.astrocyte <- df.tags1[df.tags1$scRef.tag == 'Astrocyte', ]
 ggplot(sub.astrocyte, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
-model.astrocyte <- densityMclust(sub.astrocyte$log10Pval, G=6)
+model.astrocyte <- densityMclust(sub.astrocyte$log10Pval)
 summary(model.astrocyte, parameters = T)
-sub.astrocyte$cluster <- model$classification
+sub.astrocyte$cluster <- model.astrocyte$classification
 Thickness <- sub.astrocyte$log10Pval
 dens <- model.astrocyte
 x <- seq(min(Thickness)-diff(range(Thickness))/10,max(Thickness)+diff(range(Thickness))/10, length = 2000)
@@ -123,14 +123,14 @@ plot.2 <- ggplot() +
 ggsave(plot = plot.2, path = '/home/zy/scRef/figure', filename = 'GMM3.png',
        units = 'cm', height = 10, width = 12)
 
-sub.neuron <- df.tags[df.tags$scRef.tag == 'Neuron', ]
+sub.neuron <- df.tags[df.tags$scRef.tag.12 == 'Neuron', ]
 sub.neuron <- df.tags1[df.tags1$scRef.tag == 'Neuron', ]
 ggplot(sub.neuron, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
-model.neuron <- densityMclust(sub.neuron$log10Pval, G=6)
+model.neuron <- densityMclust(sub.neuron$log10Pval)
 summary(model.neuron, parameters = T)
 
 sub.Endo <- df.tags1[df.tags1$scRef.tag == 'Endothelial Cell', ]
-ggplot(sub.Endo, aes(x = log10Pval)) + geom_histogram(binwidth = 1) + geom_density()
+ggplot(sub.Endo, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
 model.Endo <- densityMclust(sub.Endo$log10Pval)
 summary(model.Endo, parameters = T)
 Thickness <- sub.Endo$log10Pval
@@ -165,7 +165,7 @@ plot.2 <- ggplot() +
 ggsave(plot = plot.2, path = '/home/zy/scRef/figure', filename = 'GMM5.png',
        units = 'cm', height = 10, width = 12)
 
-sub.Microglia <- df.tags[df.tags$scRef.tag == 'Microglia', ]
+sub.Microglia <- df.tags[df.tags$scRef.tag.12 == 'Microglia', ]
 sub.Microglia <- df.tags1[df.tags1$scRef.tag == 'Microglia', ]
 ggplot(sub.Microglia, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
 model.Microglia <- densityMclust(sub.Microglia$log10Pval, G=6)
@@ -173,6 +173,8 @@ summary(model.Microglia, parameters = T)
 
 ref.oligo <- df.tags1[select.tag1[select.tag1$tag == 'Oligodend', 'cell_id'], ]
 ggplot(ref.oligo, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
+sub.Oligo <- df.tags1[df.tags1$scRef.tag == 'Myelinating oligodendrocyte', ]
+sub.Oligo <- df.tags[df.tags$scRef.tag.12 == 'Myelinating oligodendrocyte', ]
 sub.Oligo <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte', ]
 sub.Oligo <- df.tags[df.tags$scRef.tag == 'Oligodendrocyte', ]
 ggplot(sub.Oligo, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
@@ -214,8 +216,15 @@ sub.OPC <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte Precursor Cell', ]
 sub.OPC <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte precursor cell', ]
 sub.OPC <- df.tags[df.tags$scRef.tag == 'Oligodendrocyte Precursor Cell', ]
 ggplot(sub.OPC, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
-model.OPC <- densityMclust(sub.OPC$log10Pval, G = 6)
+model.OPC <- densityMclust(sub.OPC$log10Pval)
 summary(model.OPC, parameters = T)
+
+sub.ependymal <- df.tags1[df.tags1$scRef.tag == 'Hypothalamic ependymal cell', ]
+sub.ependymal <- df.tags[df.tags$scRef.tag.12 == 'Hypothalamic ependymal cell', ]
+ggplot(sub.ependymal, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
+model.ependymal <- densityMclust(sub.ependymal$log10Pval)
+summary(model.ependymal, parameters = T)
+min(sub.ependymal$log10Pval[model.ependymal$classification == '4'])
 
 meta.tag <- merge(result.scref$final.out, label.origin, by = 'row.names')
 row.names(meta.tag) <- meta.tag$Row.names

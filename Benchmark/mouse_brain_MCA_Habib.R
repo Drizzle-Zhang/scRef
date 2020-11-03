@@ -35,14 +35,17 @@ prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
 }
 
 # evaluation
-simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
+simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     # uniform tags
-    for (j in 1:dim(df.cell.names)[1]) {
-        scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
-            df.cell.names[j, 'sc.name']
+    for (j in 1:dim(df.ref.names)[1]) {
+        scRef.tag[scRef.tag == df.ref.names[j, 'ref.name']] <- df.ref.names[j, 'name']
+    }
+    scRef.tag[!(scRef.tag %in% df.ref.names$name)] <- 'Unassigned'
+    for (j in 1:dim(df.sc.names)[1]) {
+        true.tag[true.tag == df.sc.names[j, 'sc.name']] <- df.sc.names[j, 'name']
     }
     
-    true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
+    # true.labels <- setdiff(unique(true.tag), 'Unassigned')
     true.labels <- unique(true.tag)
     our.tag <- scRef.tag
     weighted_macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'weighted', labels = true.labels)
@@ -54,7 +57,6 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
     accuracy.rm.unassigned <- metrics$accuracy_score(true.tag.rm, our.tag.rm)
     
     f1 <- c()
-    precision <- c()
     for (label in true.labels) {
         tmp.true.tag <- true.tag
         tmp.our.tag <- our.tag
@@ -62,21 +64,30 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
         tmp.our.tag[tmp.our.tag != label] <- '0'
         sub.f1 <- metrics$f1_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
         f1 <- c(f1, sub.f1)
-        sub.precision <- metrics$precision_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
-        precision <- c(precision, sub.precision)
     }
     names(f1) <- true.labels
-    names(precision) <- true.labels
-    names.rm.unassigned <- setdiff(true.labels, 'Unassigned')
-    mean.precision <- mean(precision[names.rm.unassigned])
+    
+    our.labels <- setdiff(unique(our.tag), 'Unassigned')
+    precision <- c()
+    for (label in our.labels) {
+        tmp.true.tag <- true.tag.rm
+        tmp.our.tag <- our.tag.rm
+        tmp.true.tag[tmp.true.tag != label] <- '0'
+        tmp.our.tag[tmp.our.tag != label] <- '0'
+        sub.precision <- metrics$precision_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
+        precision <- c(precision, sub.precision)
+        
+    }
+    names(precision) <- our.labels
+    mean.precision <- mean(precision)
     
     out <- list()
     out$weighted_macro_f1 <- weighted_macro_f1
     out$macro_f1 <- macro_f1
     out$accuracy <- accuracy
     out$f1 <- f1
-    out$precision.rm.unassigned <- precision
     out$accuracy.rm.unassigned <- accuracy.rm.unassigned
+    out$precision.rm.unassigned <- precision
     out$mean.precision.rm.unassigned <- mean.precision
     out$conf <- table(true.tag, our.tag)
     
@@ -84,7 +95,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v14.R')
+source('/home/zy/my_git/scRef/main/scRef.v17.R')
 
 ############# regard sc-counts data as reference
 library(stringr)
@@ -93,8 +104,10 @@ df.mtx <- read.delim(file.mtx, stringsAsFactors = F, row.names = 1)
 file.cellid <- '/home/disk/scRef/MouseAtlas_SingleCell_Han2018/MCA_by_tissue/Brain/CellAssignments_all_batch.txt'
 df.cellid <- read.delim(file.cellid, stringsAsFactors = F, row.names = 1)
 df.labels <- df.cellid[colnames(df.mtx),]
-ref.labels <- df.labels$CellType
-ref.mtx <- df.mtx
+ref.labels <- df.labels$CellType[df.labels$CellType != 'Pan-GABAergic']
+ref.mtx <- df.mtx[, df.labels$CellType != 'Pan-GABAergic']
+# ref.labels <- df.labels$CellType
+# ref.mtx <- df.mtx
 ref.dataset <- 'MCA'
 
 ############### import unlabeled data
@@ -112,22 +125,31 @@ label_Habib <- OUT$label.filter
 exp_sc_mat <- exp_Habib
 label_sc <- label_Habib
 
-ref.names <- unique(ref.labels)
+# label.in <- data.frame(cell_id = rownames(label_sc), 
+#                        tag = as.character(label_sc$label.unlabeled.use.cols...))
+# exp_sum <- .generate_ref(exp_sc_mat, label.in, M='SUM')
+# seurat.sc <- CreateSeuratObject(counts = exp_sum, project = "Ref")
+# seurat.sc <- NormalizeData(seurat.sc, verbose = F)
+# exp_sum <- as.matrix(seurat.sc@assays$RNA@data)
+
 # list of cell names
+ref.names <- unique(ref.labels)
+uniform.names <- c("Oligodend", "microglia", "Astrocyte", "Neurons",
+                   "Macrophage", "Granulocyte", "OPC",
+                   "Schwann cell", "Astrocyte", "Ependymocytes")
+df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
 all.cell <- unique(label_sc[,1])
-sc.name <- c("Oligodend", "microglia", "Astrocyte", "Neurons", "Unassigned",
-             "Unassigned", "Unassigned", "OPC", "Unassigned", "Unassigned", "Ependymocytes")
-unknow.cell <- setdiff(all.cell, sc.name)
-df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:length(sc.name))
+uniform.names <- c("Neurons", "Unassigned", "Unassigned", "Ependymocytes", "Oligodend",
+                   "Unassigned", "Unassigned", "Unassigned", "Astrocyte", "microglia", "OPC")
+df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v14.R')
+source('/home/zy/my_git/scRef/main/scRef.v18.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      method1 = 'kendall',
                       cluster.speed = T, cluster.cell = 10,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
@@ -164,7 +186,7 @@ train_set <- as.matrix(ref.mtx)
 test_set <- as.matrix(exp_sc_mat)
 singler = SingleR(method = "single", sc_data = test_set, 
                   ref_data = train_set, 
-                  types = ref.labels, numCores = 4)
+                  types = ref.labels, numCores = 1)
 pred.singleR <- singler$labels
 saveRDS(pred.singleR, file = paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata'))
 
@@ -274,7 +296,7 @@ df.plot <- data.frame(stringsAsFactors = F)
 
 rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
 pred.scRef <- readRDS(rda.scRef)
-res.scRef <- simple.evaluation(true.tags, pred.scRef, df.cell.names)
+res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scRef',
                      value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -293,7 +315,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
 pred.sciBet <- readRDS(rda.sciBet)
-res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.cell.names)
+res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'sciBet',
                      value = res.sciBet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -312,7 +334,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
 pred.singleCellNet <- readRDS(rda.singleCellNet)
-res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.cell.names)
+res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
                      value = res.singleCellNet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -331,7 +353,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
 pred.singleR <- readRDS(rda.singleR)
-res.singleR <- simple.evaluation(true.tags, pred.singleR, df.cell.names)
+res.singleR <- simple.evaluation(true.tags, pred.singleR, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleR',
                      value = res.singleR$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -350,7 +372,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
 pred.scmap.cluster <- readRDS(rda.scmap.cluster)
-res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.cell.names)
+res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
                      value = res.scmap.cluster$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -369,7 +391,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
 pred.scmap.cell <- readRDS(rda.scmap.cell)
-res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.cell.names)
+res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
                      value = res.scmap.cell$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -388,7 +410,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
 pred.CHETAH <- readRDS(rda.CHETAH)
-res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.cell.names)
+res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'CHETAH',
                      value = res.CHETAH$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -407,7 +429,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
 pred.scPred <- readRDS(rda.scPred)
-res.scPred <- simple.evaluation(true.tags, pred.scPred, df.cell.names)
+res.scPred <- simple.evaluation(true.tags, pred.scPred, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scPred',
                      value = res.scPred$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -426,7 +448,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
 pred.scID <- readRDS(rda.scID)
-res.scID <- simple.evaluation(true.tags, pred.scID, df.cell.names)
+res.scID <- simple.evaluation(true.tags, pred.scID, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scID',
                      value = res.scID$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -445,7 +467,7 @@ df.plot <- rbind(df.plot, df.sub)
 
 rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
 pred.scClassify <- readRDS(rda.scClassify)
-res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.cell.names)
+res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scClassify',
                      value = res.scClassify$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -466,6 +488,10 @@ df.plot <- rbind(df.plot, df.sub)
 df.acc <- df.plot[df.plot$term == 'Accuracy', ]
 df.plot$method <- factor(df.plot$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
+
+# save results
+file.res <- paste0(path.output, 'results_', ref.dataset, '_', dataset, '.txt')
+write.table(df.plot, file = file.res, sep = '\t')
 
 
 library(ggplot2)
