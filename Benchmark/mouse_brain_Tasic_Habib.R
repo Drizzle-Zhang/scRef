@@ -85,7 +85,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v18.R')
+source('/home/zy/my_git/scRef/main/scRef.v19.R')
 
 ############# regard sc-counts data as reference
 path.input <- '/home/zy/scRef/summary/'
@@ -128,11 +128,11 @@ df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:len
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v18.R')
+source('/home/zy/my_git/scRef/main/scRef.v19.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = T, cluster.cell = 10,
+                      cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
 saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))

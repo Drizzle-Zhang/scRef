@@ -126,7 +126,7 @@ ggsave(plot = plot.2, path = '/home/zy/scRef/figure', filename = 'GMM3.png',
 sub.neuron <- df.tags[df.tags$scRef.tag.12 == 'Neuron', ]
 sub.neuron <- df.tags1[df.tags1$scRef.tag == 'Neuron', ]
 ggplot(sub.neuron, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
-model.neuron <- densityMclust(sub.neuron$log10Pval)
+model.neuron <- densityMclust(sub.neuron$log10Pval, G=2)
 summary(model.neuron, parameters = T)
 
 sub.Endo <- df.tags1[df.tags1$scRef.tag == 'Endothelial Cell', ]
@@ -214,10 +214,41 @@ ggsave(plot = plot.1, path = '/home/zy/scRef/figure', filename = 'GMM4.png',
 
 sub.OPC <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte Precursor Cell', ]
 sub.OPC <- df.tags1[df.tags1$scRef.tag == 'Oligodendrocyte precursor cell', ]
-sub.OPC <- df.tags[df.tags$scRef.tag == 'Oligodendrocyte Precursor Cell', ]
+sub.OPC <- df.tags[df.tags$scRef.tag.12 == 'Oligodendrocyte precursor cell', ]
 ggplot(sub.OPC, aes(x = log10Pval)) + geom_histogram(binwidth = 1)
 model.OPC <- densityMclust(sub.OPC$log10Pval)
 summary(model.OPC, parameters = T)
+Thickness <- sub.OPC$log10Pval
+dens <- model.OPC
+x <- seq(min(Thickness)-diff(range(Thickness))/10,max(Thickness)+diff(range(Thickness))/10, length = 2000)
+cdens <- predict(dens, x, what = "cdens")
+cdens <- t(apply(cdens, 1, function(d) d*dens$parameters$pro))
+for (i in 1:dim(cdens)[2]) {
+    if (i == 1) {
+        df.dens <- data.frame(score = x, density = cdens[, 1], cluster = rep('1', 2000))
+    } else {
+        df.dens <- rbind(df.dens, data.frame(score = x, density = cdens[, i], cluster = rep(as.character(i), 2000)))
+    }
+}
+# ggplot(df.dens, aes(x = score, y = density, color = cluster)) + geom_line()
+plot.1 <- ggplot() + 
+    geom_histogram(data = sub.OPC, aes(x = log10Pval), fill = 'gray', alpha = 1, binwidth = 3) + 
+    geom_line(data = df.dens, aes(x = score, y = rescale(density, c(0, 40)), color = cluster)) + 
+    geom_vline(xintercept = min(Thickness[dens$classification == '3'])) + 
+    labs(x = 'Confidence Score', y = 'Count') + 
+    scale_y_continuous(breaks=pretty_breaks(5),sec.axis = sec_axis( ~rescale(.,c(0,0.50)),name = "Density"))+
+    theme(
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = 'transparent', color = 'gray'),
+        legend.position = "none",
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        # legend.text = element_text(size = 15)
+    )
+ggsave(plot = plot.1, path = '/home/zy/scRef/figure', filename = 'GMM5.png',
+       units = 'cm', height = 10, width = 12)
 
 sub.ependymal <- df.tags1[df.tags1$scRef.tag == 'Hypothalamic ependymal cell', ]
 sub.ependymal <- df.tags[df.tags$scRef.tag.12 == 'Hypothalamic ependymal cell', ]

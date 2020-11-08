@@ -1326,14 +1326,14 @@
             vec.cutoff <- c(vec.cutoff, ceiling.cutoff)
             next()
         }
-        # if (opt.strict) {
-        #     # sub.cutoff <- cluster.mean[cluster.known[1]]
-        #     sub.cutoff <- median(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
-        # } else {
-        #     sub.cutoff <- 
-        #         min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
-        # }
-        sub.cutoff <- min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
+        if (opt.strict) {
+            # sub.cutoff <- cluster.mean[cluster.known[1]]
+            sub.cutoff <- median(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
+        } else {
+            sub.cutoff <-
+                min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
+        }
+        # sub.cutoff <- min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
         sub.cutoff <- max(sub.cutoff, cutoff.pos)
         sub.cutoff <- min(ceiling.cutoff, sub.cutoff)
         vec.cutoff <- c(vec.cutoff, sub.cutoff)

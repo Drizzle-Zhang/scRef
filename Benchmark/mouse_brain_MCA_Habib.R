@@ -95,7 +95,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v17.R')
+source('/home/zy/my_git/scRef/main/scRef.v19.R')
 
 ############# regard sc-counts data as reference
 library(stringr)
@@ -134,23 +134,23 @@ label_sc <- label_Habib
 
 # list of cell names
 ref.names <- unique(ref.labels)
-uniform.names <- c("Oligodend", "microglia", "Astrocyte", "Neurons",
-                   "Macrophage", "Granulocyte", "OPC",
+uniform.names <- c("Oligodend", "PVM/Microglia", "Astrocyte", "Neurons",
+                   "PVM/Microglia", "Granulocyte", "OPC",
                    "Schwann cell", "Astrocyte", "Ependymocytes")
 df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
 all.cell <- unique(label_sc[,1])
 uniform.names <- c("Neurons", "Unassigned", "Unassigned", "Ependymocytes", "Oligodend",
-                   "Unassigned", "Unassigned", "Unassigned", "Astrocyte", "microglia", "OPC")
+                   "Unassigned", "Unassigned", "Unassigned", "Astrocyte", "PVM/Microglia", "OPC")
 df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v18.R')
+source('/home/zy/my_git/scRef/main/scRef.v19.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = T, cluster.cell = 10,
+                      cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
 saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
