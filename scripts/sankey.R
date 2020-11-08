@@ -150,9 +150,14 @@ source('/home/zy/my_git/scRef/main/scRef.v19.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = T, cluster.cell = 10,
+                      cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
-saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
+
+rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
+pred.scRef <- readRDS(rda.scRef)
+res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
+
+
 
 
