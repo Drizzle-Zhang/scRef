@@ -145,7 +145,7 @@ df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
-### scRef
+### scRef 
 source('/home/zy/my_git/scRef/main/scRef.v19.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
@@ -159,5 +159,7 @@ pred.scRef <- readRDS(rda.scRef)
 res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
 
 
+
+table.scRef <- table(true.tags, pred.scRef)
 
 
