@@ -272,6 +272,11 @@ df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
+# save results
+file.res <- paste0(path.output, 'results_', dataset, '.txt')
+write.table(df.heatmap, file = file.res, sep = '\t', quote = F, row.names = F)
+
+
 # plot heatmap
 library(ggplot2)
 plot.heatmap <- ggplot(data = df.heatmap, aes(method, term)) + 

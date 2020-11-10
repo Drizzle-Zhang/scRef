@@ -3,64 +3,38 @@ library(reticulate)
 use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 # py_config()
 py_module_available('sklearn')
+setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train1_test4/panc8_indrop')
 
-setwd('/home/zy/my_git/scRef/Benchmark/cross_validation/train4_test1/Campbell')
 source('./Cross_Validation.R')
 source('./method_functions.R')
 source('./evaluate.R')
 
 path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/cross_validation/train4_test1/Campbell/'
-
-# setwd('/home/drizzle_zhang/my_git/scRef/Benchmark/cross_validation/train4_test1')
-# source('./Cross_Validation.R')
-# source('./method_functions.R')
-# source('./evaluate.R')
-# 
-# path.input <- '/home/drizzle_zhang/scRef/'
-# path.output <- '/home/drizzle_zhang/scRef/cross_validation/train4_test1/'
+path.output <- '/home/zy/scRef/cross_validation/train1_test4/panc8_indrop/'
+if (!dir.exists(path.output)) {
+    dir.create(path.output)
+}
 
 # filter data
-dataset <- 'Campbell'
+dataset <- 'panc8_indrop'
 DataPath <- paste0(path.output, dataset, '.Rdata')
 OutputDir <- path.output
-# # function of data preparation
-# prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
-#                          del.label = c('miss')) {
-#     library(stringr)
-#     data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-#     data.unlabeled <- floor(data.unlabeled)
-#     names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-#     names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-#     # read label file
-#     file.label.unlabeled <- file.label.unlabeled
-#     label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-#     row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-#     row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-#     col.name1 <- names(data.unlabeled)[1]
-#     if (substring(col.name1, 1, 1) == 'X') {
-#         row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-#     }
-#     # filter data
-#     use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-#     data.filter <- data.unlabeled[,use.cols]
-#     label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-# 
-#     OUT <- list()
-#     OUT$data.filter <- data.filter
-#     OUT$label.filter <- label.filter
-#     return(OUT)
-# 
-# }
-# file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-# file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-# saveRDS(OUT, file = DataPath)
 
-# generate cross validation dataset
-# OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
+# library(Seurat)
+# library(SeuratData)
+# data("panc8")
+# OUT <- list()
+# OUT$data.filter <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in%
+#                                                          c('indrop1', 'indrop2', 'indrop3', 'indrop4')])
+# OUT$label.filter <- data.frame(
+#     annotations = as.character(panc8$celltype)[panc8$dataset %in%
+#                                                    c('indrop1', 'indrop2', 'indrop3', 'indrop4')],
+#     row.names = colnames(OUT$data.filter))
+# saveRDS(OUT, file = DataPath)
+# 
+# # generate cross validation dataset
 # label.filter <- OUT$label.filter
-# LabelsPath <- paste0(path.input, 'Habib_label.txt')
+# LabelsPath <- paste0(path.output, dataset, '_label.txt')
 # write.table(label.filter, file = LabelsPath, sep = '\t', quote = F)
 # Cross_Validation(LabelsPath, OutputDir)
 
@@ -92,7 +66,6 @@ df.heatmap <- data.frame(stringsAsFactors = F)
 # scRef
 # run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
-# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
 PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
 res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
 df.sub <- data.frame(term = names(res.scRef$F1), 
@@ -301,11 +274,6 @@ df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
 df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
-
-# save results
-file.res <- paste0(path.output, 'results_', dataset, '.txt')
-write.table(df.heatmap, file = file.res, sep = '\t', quote = F, row.names = F)
-
 
 # plot heatmap
 library(ggplot2)

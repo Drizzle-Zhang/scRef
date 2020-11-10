@@ -65,9 +65,8 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
         out.group = 'HCA',
         use.RUVseq = T,
         cluster.speed = F,
-        cluster.resolution = 0.8, 
         min_cell = 1,
-        threshold.recall = 0.4,
+        threshold.recall = 0.2,
         CPU = 10
       )
       label.scRef <- as.character(result.scref$final.out$scRef.tag)

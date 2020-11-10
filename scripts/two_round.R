@@ -3,6 +3,7 @@ library(reticulate)
 library(ggplot2)
 library(ggalluvial)
 library(networkD3)
+library(webshot)
 use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 # py_config()
 py_module_available('sklearn')
@@ -153,14 +154,32 @@ for (label1 in rownames(mytable.two)) {
                                            count = mytable.two[label1, label2]))
     }
 }
-table.tags <- table(label_sc$label.unlabeled.use.cols...)
+table.tags <- table(true.tags)
 table.annos <- table(pred.scRef)
 mydata.two$origin <- factor(mydata.two$origin, levels = names(table.tags)[order(table.tags, decreasing = T)])
 mydata.two$annotation <- factor(mydata.two$annotation, levels = names(table.annos)[order(table.annos, decreasing = T)])
-names <- sort(unique(c(levels(mydata.two$origin), levels(mydata.two$annotation))))
+names <- c(levels(mydata.two$origin), levels(mydata.two$annotation))
 names <- data.frame(name=c(names))
-sankeyNetwork(Links = mydata.two, Nodes = names, 
-              Source = 'origin', Target = 'annotation', Value = 'count')
+
+mydata.two$origin <- as.character(mydata.two$origin)
+mydata.two$annotation <- as.character(mydata.two$annotation)
+df.sc <- data.frame(name=names[1:11,], id = 0:10)
+df.anno <- data.frame(name=names[12:19,], id = 11:18)
+for (j in 1:dim(df.anno)[1]) {
+    mydata.two$annotation[mydata.two$annotation == df.anno[j, 'name']] <- df.anno[j, 'id']
+}
+for (j in 1:dim(df.sc)[1]) {
+    mydata.two$origin[mydata.two$origin == df.sc[j, 'name']] <- df.sc[j, 'id']
+}
+mydata.two$origin <- as.numeric(mydata.two$origin)
+mydata.two$annotation <- as.numeric(mydata.two$annotation)
+mydata.two <- mydata.two[mydata.two$count != 0, ]
+
+D3.js.two <- sankeyNetwork(Links = mydata.two, Nodes = names, 
+              Source = 'origin', Target = 'annotation', Value = 'count', NodeID = "name",
+              units = 'cm', fontSize = 18, fontFamily = 'Arial', height = 900, width = 600)
+saveNetwork(D3.js.two, paste0(path.output, "two_round.html"))
+# webshot::webshot(paste0(path.output, "two_round.html"), file=paste0(path.output, "two_round.jpeg"), delay=2)
 
 #########
 # plot.1 <- ggplot(data = mydata,
@@ -188,52 +207,65 @@ sankeyNetwork(Links = mydata.two, Nodes = names,
 ####################
 
 ### scRef single-round
-source('/home/zy/my_git/scRef/main/scRef.v12.R')
+source('/home/zy/my_git/scRef/main/scRef.v19.R')
 setwd('~/my_git/scRef')
-result.scref.single <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
-                      type_ref = 'sc-counts', use.RUVseq = T, single_round = T, 
-                      method1 = 'kendall',
-                      cluster.speed = T, cluster.cell = 10,
+result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
+                      type_ref = 'sc-counts', use.RUVseq = T, single_round = T,  
+                      cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
-pred.scRef.single <- result.scref.single$final.out$scRef.tag
-mytable <- table(label_sc$label.unlabeled.use.cols..., pred.scRef.single)
-mydata <- data.frame(stringsAsFactors = F)
-for (label1 in rownames(mytable)) {
-    for (label2 in colnames(mytable)) {
-        mydata <- rbind(mydata, data.frame(origin = label1, annotation = label2, 
-                                           count = mytable[label1, label2]))
+pred.scRef.single <- result.scref$final.out$scRef.tag
+saveRDS(pred.scRef.single, file = paste0(path.output, 'single_round_scRef.Rdata'))
+
+rda.scRef.single <- paste0(path.output, 'single_round_scRef.Rdata')
+pred.scRef.single <- readRDS(rda.scRef.single)
+
+# rename
+df.ref.names <- data.frame(ref.name = ref.names, 
+                           name = c('Oligodendrocyte', "Microglia", "Astrocyte", "Neuron", "Macrophage", 
+                                    "Granulocyte", "Oligodendrocyte precursor cell", "Schwann cell", 
+                                    "Astroglial cell", "Hypothalamic ependymal cell"))
+# df.sc.names <- data.frame(sc.name = all.cell, 
+#                           name = c("Neuron", "ParsTuber", "MuralCells", "Hypothalamic ependymal cell", 
+#                                    'Oligodendrocyte', "Tanycyte", "Endothelial Cell", "Fibroblast",
+#                                    "Astrocyte", "Microglia", "Oligodendrocyte precursor cell"))
+for (j in 1:dim(df.ref.names)[1]) {
+    pred.scRef.single[pred.scRef.single == df.ref.names[j, 'ref.name']] <- df.ref.names[j, 'name']
+}
+# for (j in 1:dim(df.sc.names)[1]) {
+#     true.tags[true.tags == df.sc.names[j, 'sc.name']] <- df.sc.names[j, 'name']
+# }
+
+mytable.single <- table(true.tags, pred.scRef.single)
+mydata.single <- data.frame(stringsAsFactors = F)
+for (label1 in rownames(mytable.single)) {
+    for (label2 in colnames(mytable.single)) {
+        mydata.single <- rbind(mydata.single, data.frame(origin = label1, annotation = label2, 
+                                                   count = mytable.single[label1, label2]))
     }
 }
-table.tags <- table(label_sc$label.unlabeled.use.cols...)
+table.tags <- table(true.tags)
 table.annos <- table(pred.scRef)
-mydata$origin <- factor(mydata$origin, levels = names(table.tags)[order(table.tags, decreasing = T)])
-mydata$annotation <- factor(mydata$annotation, levels = names(table.annos)[order(table.annos, decreasing = T)])
+mydata.single$origin <- factor(mydata.single$origin, levels = names(table.tags)[order(table.tags, decreasing = T)])
+mydata.single$annotation <- factor(mydata.single$annotation, levels = names(table.annos)[order(table.annos, decreasing = T)])
+names <- c(levels(mydata.single$origin), levels(mydata.single$annotation))
+names <- data.frame(name=c(names))
 
+mydata.single$origin <- as.character(mydata.single$origin)
+mydata.single$annotation <- as.character(mydata.single$annotation)
+df.sc <- data.frame(name=names[1:11,], id = 0:10)
+df.anno <- data.frame(name=names[12:19,], id = 11:18)
+for (j in 1:dim(df.anno)[1]) {
+    mydata.single$annotation[mydata.single$annotation == df.anno[j, 'name']] <- df.anno[j, 'id']
+}
+for (j in 1:dim(df.sc)[1]) {
+    mydata.single$origin[mydata.single$origin == df.sc[j, 'name']] <- df.sc[j, 'id']
+}
+mydata.single$origin <- as.numeric(mydata.single$origin)
+mydata.single$annotation <- as.numeric(mydata.single$annotation)
+mydata.single <- mydata.single[mydata.single$count != 0, ]
 
-
-#########################
-plot.2 <- ggplot(data = mydata,
-                 aes(axis1 = origin, axis2 = annotation, y = count)) +
-    scale_x_discrete(limits = c("Origin labels", "scRef annotations"), expand = c(.01, .05)) +
-    geom_alluvium(aes(fill = origin)) +
-    geom_stratum(width = 0.25) + 
-    geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) + 
-    labs(fill = 'Origin labels', y = '') + 
-    theme(
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 15),
-        panel.grid = element_blank(),
-        panel.background = element_rect(fill = 'transparent'),
-        axis.text.x = element_text(size = 15, vjust = 15),
-        panel.border = element_blank(),
-        axis.ticks = element_blank(),
-        axis.line = element_blank(),
-        axis.text.y = element_blank()
-    )
-pathout <- '/home/zy/scRef/figure'
-ggsave(filename = 'single-round.png', 
-       path = pathout, plot = plot.2,
-       units = 'cm', height = 40, width = 30)
-##########################
-
+D3.js.single <- sankeyNetwork(Links = mydata.single, Nodes = names, 
+                           Source = 'origin', Target = 'annotation', Value = 'count', NodeID = "name",
+                           units = 'cm', fontSize = 18, fontFamily = 'Arial', height = 900, width = 600)
+saveNetwork(D3.js.single, paste0(path.output, "single_round.html"))
 

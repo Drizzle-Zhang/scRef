@@ -24,10 +24,10 @@ OutputDir <- path.output
 # library(SeuratData)
 # data("panc8")
 # OUT <- list()
-# OUT$data.filter <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% 
+# OUT$data.filter <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in%
 #                                                          c('indrop1', 'indrop2', 'indrop3', 'indrop4')])
 # OUT$label.filter <- data.frame(
-#     annotations = as.character(panc8$celltype)[panc8$dataset %in% 
+#     annotations = as.character(panc8$celltype)[panc8$dataset %in%
 #                                                    c('indrop1', 'indrop2', 'indrop3', 'indrop4')],
 #     row.names = colnames(OUT$data.filter))
 # saveRDS(OUT, file = DataPath)
@@ -274,6 +274,11 @@ df.heatmap$term <- factor(df.heatmap$term, levels = unique.term)
 df.acc <- df.heatmap[df.heatmap$term == 'Accuracy', ]
 df.heatmap$method <- factor(df.heatmap$method, 
                             levels = df.acc$method[order(df.acc$value, decreasing = T)])
+
+# save results
+file.res <- paste0(path.output, 'results_', dataset, '.txt')
+write.table(df.heatmap, file = file.res, sep = '\t', quote = F, row.names = F)
+
 
 # plot heatmap
 library(ggplot2)

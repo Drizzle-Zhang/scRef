@@ -250,22 +250,16 @@
 }
 
 
-.get_tag_topN <- function(P_REF_GIVEN_SC, topN = 5) {
+.get_tag_second <- function(P_REF_GIVEN_SC) {
     RN <- rownames(P_REF_GIVEN_SC)
     CN <- colnames(P_REF_GIVEN_SC)
-    TAG <- CN
-    for (j in 1:topN) {
-        TAG <- cbind(TAG, rep('NA', length(CN)))
-    }
+    TAG <- cbind(CN, rep('NA', length(CN)))
     i <- 1
     while (i <= length(CN)) {
-        # for (j in 1:topN) {
-        #     TAG[i, j + 1] <- RN[order(P_REF_GIVEN_SC[,i], decreasing = T)[j]]
-        # }
-        TAG[i, 2:(topN + 1)] <- RN[order(P_REF_GIVEN_SC[,i], decreasing = T)[1:topN]]
+        TAG[i, 2] <- RN[order(P_REF_GIVEN_SC[,i], decreasing = T)[2]]
         i <- i + 1
     }
-    colnames(TAG) <- c('cell_id', paste('tag', 1:topN, sep = '_'))
+    colnames(TAG) <- c('cell_id', 'tag')
     return(TAG)
 }
 
@@ -1073,7 +1067,7 @@
 }
 
 
-.cutoff_GMM <- function(df.tags.in, num_cluster = 6, floor.cutoff = 5, ceiling.cutoff = 30, 
+.cutoff_GMM <- function(df.tags.in, num_cluster = 6, floor.cutoff = 5, ceiling.cutoff = 20, 
                         opt.strict = T) {
     library(mclust, verbose = F)
     cells <- unique(df.tags.in$scRef.tag)
@@ -1717,7 +1711,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     print('Second-round annotation:')
     print(method2)
     if (corr_use_HVGene) {
-        HVG <- .get_high_variance_genes(LocalRef, num.genes = 5000)
+        HVG <- .get_high_variance_genes(LocalRef)
         similarity.in <- df.exp.merge[HVG, ]
         ref.in <- LocalRef[HVG, ]
     } else {
@@ -1951,5 +1945,47 @@ supervised.UMAP <- function(mtx.in, labels) {
     plot.out <- DimPlot(seurat.unlabeled, reduction = "umap.label", label = T, group.by = 'label')
     
     return(plot.out)
+    
+}
+
+
+annotate.UnassignedCell <- function(result.scref, exp_sc_mat, atlas = 'MCA', CPU = 8) {
+    final.out <- result.scref$final.out
+    cell_id.unassigned <- row.names(final.out[final.out$scRef.tag == 'Unassigned',])
+    exp.unassigned <- exp_sc_mat[, cell_id.unassigned]
+
+    # read atlas
+    out.group <- atlas
+    if (class(out.group)[1] %in% c("data.frame", "matrix")) {
+        df.out.group <- out.group
+    } else {
+        if (class(out.group)[1] == "character") {
+            if (out.group %in% c("MCA", "HCA")) {
+                if (out.group == "MCA") {
+                    file.out.group <- './CellAtlas/MCA.txt'
+                } else {
+                    file.out.group <- './CellAtlas/HCA.txt'
+                }
+            } else {
+                if (file.exists(out.group)) {
+                    file.out.group <- out.group
+                }
+            }
+            df.out.group <- 
+                read.table(file.out.group, header = T, row.names = 1, 
+                           sep = '\t', check.names = F)
+        } else {
+            stop('Error: incorrect input of outgroup')
+        }
+    }
+
+    source('/home/zy/my_git/scRef/main/scRef.v19.R')
+    setwd('~/my_git/scRef')
+    result.unassign <- SCREF(exp.unassigned, df.out.group,
+                          type_ref = 'sum-counts', use.RUVseq = F, 
+                          cluster.speed = F, cluster.cell = 5,
+                          min_cell = 5, CPU = 10)
+    pred.unassign <- result.unassign$final.out$scRef.tag
+    
     
 }
