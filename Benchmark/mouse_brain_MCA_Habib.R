@@ -95,7 +95,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v19.R')
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
 
 ############# regard sc-counts data as reference
 library(stringr)
@@ -146,7 +146,7 @@ df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v19.R')
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 

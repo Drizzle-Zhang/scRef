@@ -362,8 +362,7 @@
 }
 
 
-.imoprt_outgroup <- function(out.group = 'MCA', use.RUVseq = T) {
-    library(Seurat, verbose = F)
+.imoprt_outgroup <- function(out.group = 'MCA', normalization = T, use.RUVseq = T) {
     if (class(out.group)[1] %in% c("data.frame", "matrix")) {
         df.out.group <- out.group
     } else {
@@ -386,20 +385,26 @@
             stop('Error: incorrect input of outgroup')
         }
     }
-    seurat.out.group <- 
-        CreateSeuratObject(counts = df.out.group, project = "out.group", 
-                           min.cells = 1, min.features = 5000)
-    seurat.out.group <- 
-        NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
-                      scale.factor = 1e6, verbose = F)
-    if (use.RUVseq) {
-        # get stably expression genes
-        seurat.out.group <- FindVariableFeatures(
-            seurat.out.group, selection.method = "mvp",
-            mean.cutoff = c(3, Inf), dispersion.cutoff = c(-0.05, 0.05), verbose = F)
+    if (normalization) {
+        library(Seurat, verbose = F)
+        seurat.out.group <- 
+            CreateSeuratObject(counts = df.out.group, project = "out.group", 
+                               min.cells = 1, min.features = 5000)
+        seurat.out.group <- 
+            NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
+                          scale.factor = 1e6, verbose = F)
+        if (use.RUVseq) {
+            # get stably expression genes
+            seurat.out.group <- FindVariableFeatures(
+                seurat.out.group, selection.method = "mvp",
+                mean.cutoff = c(3, Inf), dispersion.cutoff = c(-0.05, 0.05), verbose = F)
+        }
+        
+        return(seurat.out.group)
+        
+    } else {
+        return(df.out.group)
     }
-
-    return(seurat.out.group)
     
 }
 
@@ -677,7 +682,7 @@
     seurat.Ref.cell <- NormalizeData(seurat.Ref.cell, verbose = F)
     seurat.Ref.cell@meta.data$original.label <- vec.tag1
     markers <- FindMarkers(seurat.Ref.cell, ident.1 = cell, group.by = 'original.label',
-                           only.pos = T, features = genes.high,
+                           only.pos = T, features = genes.high, min.cells.group = 1,
                            min.pct = 0.2, min.diff.pct = 0.1, 
                            logfc.threshold = 0.3, verbose = F)
     # markers$p_val_fdr <- p.adjust(markers$p_val, method = 'fdr')
@@ -700,7 +705,7 @@
         seurat.neg.cell <- NormalizeData(seurat.neg.cell, verbose = F)
         seurat.neg.cell@meta.data$original.label <- tag.in
         markers <- FindMarkers(seurat.neg.cell, ident.1 = cell, group.by = 'original.label',
-                               only.pos = T, features = use.genes,
+                               only.pos = T, features = use.genes, min.cells.group = 1,
                                min.pct = 0.2, min.diff.pct = 0.1, 
                                logfc.threshold = 0.3, verbose = F)
         # markers$p_val_fdr <- p.adjust(markers$p_val, method = 'fdr')
@@ -1254,16 +1259,19 @@
         cell <- cells[i]
         print(cell)
         df.sub <- df.tags.in[df.tags.in$scRef.tag == cell, ]
-        if (length(unique(df.sub$log10Pval)) < 4) {
+        if (length(unique(df.sub$log10Pval)) < 6) {
             vec.cutoff <- c(vec.cutoff, (ceiling.cutoff + cutoff.pos)/2)
-            vec.neg.cutoff <- c(vec.neg.cutoff, neg.cutoff)
+            if (opt.negative) {
+                neg.cutoff <- NA
+                vec.neg.cutoff <- c(vec.neg.cutoff, neg.cutoff)
+            }
             next()
         }
         if (is.null(num_cluster)) {
             model <- densityMclust(df.sub$log10Pval, verbose = F)
         } else {
             model <- densityMclust(df.sub$log10Pval, 
-                                   G = min(num_cluster, length(unique(df.sub$log10Pval))-2), 
+                                   G = min(num_cluster, round(length(unique(df.sub$log10Pval))/6)), 
                                    verbose = F)
         }
         cluster.mean <- model$parameters$mean[order(model$parameters$mean)]
@@ -1389,12 +1397,13 @@
 
 
 SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL, 
-                  identify_unassigned = T, single_round = F, corr_use_HVGene = T,
+                  identify_unassigned = T, single_round = F, 
                   type_ref = 'sc-counts', out.group = 'MCA', use.RUVseq = T, 
                   topN = 50, percent.high.exp = 0.8, 
                   cluster.num.pc =50, cluster.resolution = 3, 
                   cluster.speed = T, cluster.cell = 10,
                   method1 = 'kendall', method2 = 'multinomial', 
+                  corr_use_HVGene1 = 2000, corr_use_HVGene2 = 2000,
                   # cutoff.1 = 'default', cutoff.2 = 'default', 
                   GMM.num_cluster = NULL, GMM.neg_cutoff = 5, GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 30,
                   threshold.recall = 0.2,
@@ -1482,8 +1491,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
 
     print('First-round annotation:')
     print(method1)
-    if (corr_use_HVGene) {
-        HVG <- .get_high_variance_genes(exp_ref_mat, type_ref = type_ref)
+    if (!is.null(corr_use_HVGene1)) {
+        HVG <- .get_high_variance_genes(exp_ref_mat, type_ref = type_ref, 
+                                        num.genes = corr_use_HVGene1)
         similarity.in <- df.exp.merge[HVG, ]
         ref.in <- exp_ref_mat[HVG, ]
     } else {
@@ -1491,9 +1501,13 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         ref.in <- exp_ref_mat
     }
     if (method1 != 'multinomial') {
-        out1 <- .get_cor(similarity.in, ref.in, method = method1, CPU = CPU)
+        suppressMessages(
+            out1 <- .get_cor(similarity.in, ref.in, method = method1, CPU = CPU)
+        )
     } else {
-        out1 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
+        suppressMessages(
+            out1 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
+        )
     }
     
     gc()
@@ -1502,7 +1516,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
 
     if (identify_unassigned) {
         print('Build local reference')
-        df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
+        suppressMessages(
+            df.tags1 <- .confirm_label(df.exp.merge, list.cell.genes, tag1, CPU = CPU)
+        )
         cell_ids <- colnames(df.exp.merge)
         df.tags1 <- df.tags1[cell_ids, ]
         # df.tags1$cluster.merge.id <- row.names(df.tags1)
@@ -1660,7 +1676,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         }
         select.exp <- df.exp.merge[, cell_ids %in% select.barcode]
         select.tag1 <- tag1[tag1[, 'cell_id'] %in% select.barcode, ]
-        LocalRef <- .generate_ref(select.exp, select.tag1,  min_cell = 3)
+        LocalRef <- .generate_ref(select.exp, select.tag1,  min_cell = min_cell)
         vec.tag1 <- select.tag1[, 'tag']
         
     } else {
@@ -1696,22 +1712,24 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     if (identify_unassigned) {
         # find local marker genes
         print('find local marker genes')
-        out.markers <-
-            .find_markers_sc(
-                select.exp, vec.tag1, LocalRef, 
-                seurat.out.group, list.localNeg,
-                use.RUVseq = use.RUVseq,
-                base.topN = topN,
-                percent.high.exp = percent.high.exp,
-                CPU = CPU
-            )
+        suppressMessages(
+            out.markers <-
+                .find_markers_sc(
+                    select.exp, vec.tag1, LocalRef, 
+                    seurat.out.group, list.localNeg,
+                    use.RUVseq = use.RUVseq,
+                    base.topN = topN,
+                    percent.high.exp = percent.high.exp,
+                    CPU = CPU
+                )
+        )
         local.cell.genes <- out.markers[['list.cell.genes']]
     }
     
     print('Second-round annotation:')
     print(method2)
-    if (corr_use_HVGene) {
-        HVG <- .get_high_variance_genes(LocalRef)
+    if (!is.null(corr_use_HVGene2)) {
+        HVG <- .get_high_variance_genes(LocalRef, num.genes = corr_use_HVGene2)
         similarity.in <- df.exp.merge[HVG, ]
         ref.in <- LocalRef[HVG, ]
     } else {
@@ -1719,15 +1737,21 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         ref.in <- LocalRef
     }
     if (method2 != 'multinomial') {
-        out2 <- .get_cor(similarity.in, ref.in, method = method2, CPU = CPU)
+        suppressMessages(
+            out2 <- .get_cor(similarity.in, ref.in, method = method2, CPU = CPU)
+        )
     } else {
-        out2 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
+        suppressMessages(
+            out2 <- .get_log_p_sc_given_ref(similarity.in, ref.in, CPU = CPU)
+        )
     }
     tag2 <- .get_tag_max(out2)
     gc()
     
     if (identify_unassigned) {
-        df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
+        suppressMessages(
+            df.tags2 <- .confirm_label(df.exp.merge, local.cell.genes, tag2, CPU = CPU)
+        )
         cell_ids <- colnames(df.exp.merge)
         df.tags2 <- df.tags2[cell_ids, ]
         gc()
@@ -1758,10 +1782,13 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         
         # select cutoff.2 automatitically
         if (cutoff.2 == 'default') {
+            diff.log10Pval <- df.tags2[select.barcode, 'log10Pval'] - 
+                df.tags1[select.barcode, 'log10Pval']
+            min.diff <- boxplot.stats(diff.log10Pval, coef = 1)$stats[1]
             out.cutoff.2 <- .cutoff_GMM_add_neg(df.tags, num_cluster = GMM.num_cluster, 
                                               cutoff.neg = GMM.neg_cutoff, 
-                                              cutoff.pos = GMM.floor_cutoff,
-                                              ceiling.cutoff = GMM.ceiling_cutoff)
+                                              cutoff.pos = GMM.floor_cutoff + min.diff,
+                                              ceiling.cutoff = GMM.ceiling_cutoff + min.diff)
             df.cutoff.2 <- out.cutoff.2$vec.cutoff
             print('Default cutoff: ')
             print(df.cutoff.2)
@@ -1897,6 +1924,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     output$run.time <- time.scRef
     if (mod == 'debug') {
         output$df.exp.merge <- df.exp.merge
+        output$diff.log10Pval <- diff.log10Pval
     }
     
     print('Finish!')
@@ -1949,43 +1977,39 @@ supervised.UMAP <- function(mtx.in, labels) {
 }
 
 
-annotate.UnassignedCell <- function(result.scref, exp_sc_mat, atlas = 'MCA', CPU = 8) {
+annotate.UnassignedCell <- function(result.scref, exp_sc_mat, atlas = 'MCA', CPU = 4) {
     final.out <- result.scref$final.out
     cell_id.unassigned <- row.names(final.out[final.out$scRef.tag == 'Unassigned',])
     exp.unassigned <- exp_sc_mat[, cell_id.unassigned]
 
     # read atlas
-    out.group <- atlas
-    if (class(out.group)[1] %in% c("data.frame", "matrix")) {
-        df.out.group <- out.group
-    } else {
-        if (class(out.group)[1] == "character") {
-            if (out.group %in% c("MCA", "HCA")) {
-                if (out.group == "MCA") {
-                    file.out.group <- './CellAtlas/MCA.txt'
-                } else {
-                    file.out.group <- './CellAtlas/HCA.txt'
-                }
-            } else {
-                if (file.exists(out.group)) {
-                    file.out.group <- out.group
-                }
-            }
-            df.out.group <- 
-                read.table(file.out.group, header = T, row.names = 1, 
-                           sep = '\t', check.names = F)
-        } else {
-            stop('Error: incorrect input of outgroup')
-        }
-    }
+    df.atlas <- .imoprt_outgroup(atlas, normalization = F)
 
-    source('/home/zy/my_git/scRef/main/scRef.v19.R')
     setwd('~/my_git/scRef')
-    result.unassign <- SCREF(exp.unassigned, df.out.group,
+    result.unassign <- SCREF(exp.unassigned, df.atlas,
                           type_ref = 'sum-counts', use.RUVseq = F, 
-                          cluster.speed = F, cluster.cell = 5,
-                          min_cell = 5, CPU = 10)
-    pred.unassign <- result.unassign$final.out$scRef.tag
+                          corr_use_HVGene1 = 2000, corr_use_HVGene2 = NULL, 
+                          cluster.speed = F, 
+                          min_cell = 5, CPU = CPU)
+    pred.unassign <- result.unassign$final.out
+    result.scref$pred.unassign <- pred.unassign
+    pred.new <- rbind(final.out[final.out$scRef.tag != 'Unassigned',], pred.unassign)
+    result.scref$pred.new <- pred.new
     
+    return(result.scref)
     
+}
+
+
+transform.HomoloGene <- function(exp_sc_mat, inTaxID = 9606, outTaxID = 10090) {
+    library(homologene)
+    genes.in <- rownames(exp_sc_mat)
+    res.home <- homologene(genes.in, inTax = inTaxID, outTax = outTaxID)
+    res.home <- res.home[!duplicated(res.home[, 1]),]
+    res.home <- res.home[!duplicated(res.home[, 2]),]
+    genes.out <- res.home[, 1]
+    genes.homo <- res.home[, 2]
+    exp.out <- exp_sc_mat[genes.out,]
+    rownames(exp.out) <- genes.homo
+    return(exp.out)
 }

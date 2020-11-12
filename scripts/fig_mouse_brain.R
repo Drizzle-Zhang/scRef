@@ -10,6 +10,7 @@ sc.GSE_id <- c('GSE115746', 'GSE93374', 'GSE95315', 'GSE109447')
 path.res <- '/home/zy/scRef/Benchmark/mouse_brain/'
 path.fig <- '/home/zy/scRef/figure/mouse_brain'
 
+# Accuracy
 for (i in 1:length(ref.dataset)) {
     ref.data <- ref.dataset[i]
     ref.GSE <- ref.GSE_id[i]
@@ -36,6 +37,37 @@ for (i in 1:length(ref.dataset)) {
              shape = 'Query dataset', color = 'Method') + 
         theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
     ggsave(filename = paste0('scatter_', ref.data, '.png'), 
+           path = path.fig, plot = plot.scatter,
+           units = 'cm', height = 12, width = 16)
+}
+
+# Macro F1
+for (i in 1:length(ref.dataset)) {
+    ref.data <- ref.dataset[i]
+    ref.GSE <- ref.GSE_id[i]
+    df.plot <- data.frame(stringsAsFactors = F)
+    for (j in 1:length(sc.dataset)) {
+        sc.data <- sc.dataset[j]
+        sc.GSE <- sc.GSE_id[j]
+        file.res <- paste0(path.res, 'results_', ref.data, '_', sc.data, '.txt')
+        sub.res <- read.delim(file = file.res, row.names = 1, stringsAsFactors = F)
+        sub.res <- sub.res[sub.res$term == 'Macro F1',]
+        acc.scRef <- sub.res[sub.res$method == 'scRef', 'value']
+        sub.plot <- data.frame(other = sub.res[sub.res$method != 'scRef', 'value'], 
+                               scRef = rep(acc.scRef, nrow(sub.res)-1), 
+                               method = sub.res[sub.res$method != 'scRef', 'method'],
+                               dataset = rep(sc.GSE, nrow(sub.res)-1))
+        df.plot <- rbind(df.plot, sub.plot)
+    }
+    plot.scatter <- 
+        ggplot(data = df.plot, aes(x = other, y = scRef, color = method, shape = dataset)) + 
+        geom_point(size = 3) + 
+        geom_abline(intercept = 0, slope = 1, linetype = 2) + 
+        ylim(0, 1) + xlim(0, 1) + 
+        labs(x = 'Macro F1(Other method)', y = 'Macro F1(scRef)', 
+             shape = 'Query dataset', color = 'Method') + 
+        theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
+    ggsave(filename = paste0('scatter_MacroF1_', ref.data, '.png'), 
            path = path.fig, plot = plot.scatter,
            units = 'cm', height = 12, width = 16)
 }
