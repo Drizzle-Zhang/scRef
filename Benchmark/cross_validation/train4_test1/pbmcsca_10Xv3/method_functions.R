@@ -57,18 +57,17 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
       start_time <- Sys.time()
       setwd('~/my_git/scRef')
       result.scref <- SCREF(
-          test_set,
-          train_data,
-          train_label,
-          type_ref = 'sc-counts',
-          method1 = 'kendall', method2 = 'multinomial',
-          out.group = 'MCA',
-          use.RUVseq = T,
-          cluster.speed = F,
-          min_cell = 1,
-          threshold.recall = 0.5,
-          GMM.ceiling_cutoff = 20,
-          CPU = 10
+        test_set,
+        train_data,
+        train_label,
+        type_ref = 'sc-counts',
+        method1 = 'spearman', method2 = 'multinomial',
+        out.group = 'HCA',
+        use.RUVseq = T,
+        cluster.speed = F,
+        min_cell = 1,
+        threshold.recall = 0.5,
+        CPU = 10
       )
       label.scRef <- as.character(result.scref$final.out$scRef.tag)
       print(table(Labels[Test_Idx[[i]]], label.scRef))

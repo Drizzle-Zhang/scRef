@@ -112,16 +112,16 @@ ref.dataset <- 'MCA'
 
 ############### import unlabeled data
 ############### Habib
-path.input <- '/home/zy/scRef/summary/'
+path.input <- '/home/zy/scRef/sc_data/'
 path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
-dataset <- 'Habib'
+dataset <- 'Campbell'
 file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
 # OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Habib <- OUT$data.filter
-label_Habib <- OUT$label.filter
+exp_Habib <- OUT$mat_exp
+label_Habib <- OUT$label
 exp_sc_mat <- exp_Habib
 label_sc <- label_Habib
 
@@ -152,8 +152,8 @@ result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
                       cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
-pred.scRef <- result.scref$final.out$scRef.tag
-saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
+pred.scMAGIC <- result.scref$final.out$scRef.tag
+saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
 
 ### sciBet
 suppressMessages(library(tidyverse))
@@ -294,23 +294,23 @@ saveRDS(pred.scClassify,
 true.tags <- label_sc$label.unlabeled.use.cols...
 df.plot <- data.frame(stringsAsFactors = F)
 
-rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
-pred.scRef <- readRDS(rda.scRef)
-res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
-df.sub <- data.frame(term = 'Weighted macro F1', method = 'scRef',
-                     value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
+rda.scMAGIC <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
+pred.scMAGIC <- readRDS(rda.scMAGIC)
+res.scMAGIC <- simple.evaluation(true.tags, pred.scMAGIC, df.ref.names, df.sc.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scMAGIC',
+                     value = res.scMAGIC$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Macro F1', method = 'scRef',
-                           value = res.scRef$macro_f1, stringsAsFactors = F))
+                data.frame(term = 'Macro F1', method = 'scMAGIC',
+                           value = res.scMAGIC$macro_f1, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'scRef',
-                           value = res.scRef$accuracy, stringsAsFactors = F))
+                data.frame(term = 'Accuracy', method = 'scMAGIC',
+                           value = res.scMAGIC$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scRef',
-                           value = res.scRef$accuracy.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scMAGIC',
+                           value = res.scMAGIC$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scRef',
-                           value = res.scRef$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scMAGIC',
+                           value = res.scMAGIC$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')

@@ -3,7 +3,9 @@ library(ggplot2)
 datasets <- c('Campbell', 'panc8_indrop', 'pbmcsca_10Xv2', 'Tasic')
 GSE_ids <- c('GSE93374', 'GSE84133', 'GSE132044', 'GSE71585')
 path.output <- '/home/zy/scRef/cross_validation/train4_test1/'
+path.fig <- '/home/zy/scRef/figure/'
 
+# barplot
 df.plot <- data.frame(stringsAsFactors = F)
 for (i in 1:length(datasets)) {
     dataset <- datasets[i]
@@ -31,3 +33,64 @@ plot.bar <- ggplot(df.plot,
 ggsave(filename = 'barplot_CV.png', 
        path = '/home/zy/scRef/figure/', plot = plot.bar,
        units = 'cm', height = 12, width = 18)
+
+
+# scatter plot
+# accuracy
+df.plot <- data.frame(stringsAsFactors = F)
+for (i in 1:length(datasets)) {
+    dataset <- datasets[i]
+    GSE_id <- GSE_ids[i]
+    sub.res <- read.delim(paste0(path.output, dataset, '/results_', dataset, '.txt'), stringsAsFactors = F)
+    sub.res <- sub.res[sub.res$term == 'Accuracy',]
+    acc.scRef <- sub.res[sub.res$method == 'scRef', 'value']
+    sub.plot <- data.frame(other = sub.res[sub.res$method != 'scRef', 'value'], 
+                           scRef = rep(acc.scRef, nrow(sub.res)-1), 
+                           method = sub.res[sub.res$method != 'scRef', 'method'],
+                           dataset = rep(GSE_id, nrow(sub.res)-1))
+    df.plot <- rbind(df.plot, sub.plot)
+}
+plot.scatter <- 
+    ggplot(data = df.plot, aes(x = other, y = scRef, color = method, shape = dataset)) + 
+    geom_point(size = 3) + 
+    geom_abline(intercept = 0, slope = 1, linetype = 2) + 
+    ylim(0, 1) + xlim(0, 1) + 
+    labs(x = 'Accuracy(Other method)', y = 'Accuracy(scMAGIC)', 
+         shape = 'Query dataset', color = 'Method') + 
+    theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
+ggsave(filename = paste0('scatter_CV.png'), 
+       path = path.fig, plot = plot.scatter,
+       units = 'cm', height = 12, width = 16)
+
+# Macro F1
+df.plot <- data.frame(stringsAsFactors = F)
+for (i in 1:length(datasets)) {
+    dataset <- datasets[i]
+    GSE_id <- GSE_ids[i]
+    sub.res <- read.delim(paste0(path.output, dataset, '/results_', dataset, '.txt'), stringsAsFactors = F)
+    sub.res <- sub.res[sub.res$term == 'macro F1',]
+    acc.scRef <- sub.res[sub.res$method == 'scRef', 'value']
+    sub.plot <- data.frame(other = sub.res[sub.res$method != 'scRef', 'value'], 
+                           scRef = rep(acc.scRef, nrow(sub.res)-1), 
+                           method = sub.res[sub.res$method != 'scRef', 'method'],
+                           dataset = rep(GSE_id, nrow(sub.res)-1))
+    df.plot <- rbind(df.plot, sub.plot)
+}
+plot.scatter <- 
+    ggplot(data = df.plot, aes(x = other, y = scRef, color = method, shape = dataset)) + 
+    geom_point(size = 3) + 
+    geom_abline(intercept = 0, slope = 1, linetype = 2) + 
+    ylim(0, 1) + xlim(0, 1) + 
+    labs(x = 'Macro F1(Other method)', y = 'Macro F1(scMAGIC)', 
+         shape = 'Query dataset', color = 'Method') + 
+    theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
+ggsave(filename = paste0('scatter_MacroF1_CV.png'), 
+       path = path.fig, plot = plot.scatter,
+       units = 'cm', height = 12, width = 16)
+
+
+
+
+
+
+

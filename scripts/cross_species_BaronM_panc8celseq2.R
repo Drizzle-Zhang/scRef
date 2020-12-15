@@ -127,19 +127,19 @@ OUT <- readRDS(file.save)
 exp_sc_mat <- OUT$data.filter
 label_sc <- OUT$label.filter
 
-ref.names <- unique(ref.labels)
-# list of cell names
-all.cell <- unique(label_sc[,1])
-uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
-                   "Oligo/OPC", "Oligo/OPC")
-df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
-uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
-                   "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
-                   "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
-df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
+# ref.names <- unique(ref.labels)
+# # list of cell names
+# all.cell <- unique(label_sc[,1])
+# uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
+#                    "Oligo/OPC", "Oligo/OPC")
+# df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
+# uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
+#                    "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
+#                    "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
+# df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
@@ -157,6 +157,7 @@ pred.scRef <- result.scref$final.out$scRef.tag
 true.tags <- label_sc$annotations
 table(true.tags, pred.scRef)
 
+library(ggplot2)
 path.res <- '/home/zy/scRef/figure/cross_species'
 
 # heatmap
@@ -218,7 +219,6 @@ seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 100, verbose = F)
 # UMAP
 seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:20, n.neighbors = 30)
 
-library(ggplot2)
 # figure1: ture label
 plot.umap <- 
     DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'original.label') + 

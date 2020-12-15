@@ -103,8 +103,8 @@ path.output <- '/home/zy/scRef/Benchmark/cross_species/'
 dataset <- 'BaronM'
 file.data.unlabeled <- paste0(path.input, dataset, '/cell_exp.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '/cell_meta.txt')
-OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
-saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('immune_other'))
+# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 ref.mtx <- OUT$data.filter
 ref.labels <- OUT$label.filter$label.unlabeled.use.cols...
@@ -117,25 +117,25 @@ path.output <- '/home/zy/scRef/Benchmark/cross_species/'
 dataset <- 'BaronH'
 file.data.unlabeled <- paste0(path.input, dataset, '/cell_exp.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '/cell_meta.txt')
-OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
+# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 exp_sc_mat <- OUT$data.filter
 label_sc <- OUT$label.filter
 
-ref.names <- unique(ref.labels)
-# list of cell names
-all.cell <- unique(label_sc[,1])
-uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
-                   "Oligo/OPC", "Oligo/OPC")
-df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
-uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
-                   "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
-                   "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
-df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
+# ref.names <- unique(ref.labels)
+# # list of cell names
+# all.cell <- unique(label_sc[,1])
+# uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
+#                    "Oligo/OPC", "Oligo/OPC")
+# df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
+# uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
+#                    "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
+#                    "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
+# df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
@@ -145,10 +145,51 @@ exp_sc_mat <- transform.HomoloGene(exp_sc_mat)
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = F, cluster.cell = 3,
-                      # GMM.num_cluster = 6, GMM.neg_cutoff = 2, GMM.floor_cutoff = 3, GMM.ceiling_cutoff = 20, 
-                      min_cell = 3, CPU = 10)
+                      cluster.speed = F, cluster.resolution = 1,
+                      GMM.num_cluster = 3, GMM.neg_cutoff = 1, GMM.floor_cutoff = 2, GMM.ceiling_cutoff = 10,
+                      min_cell = 1, CPU = 10)
 pred.scRef <- result.scref$final.out$scRef.tag
 
 true.tags <- label_sc$label.unlabeled.use.cols...
 table(true.tags, pred.scRef)
+# df.view <- merge(label_sc, df.tags, by = 'row.names')
+# View(df.view)
+
+library(ggplot2)
+path.res <- '/home/zy/scRef/figure/cross_species'
+
+# heatmap
+method <- 'scRef'
+mytable <- table(true.tags, pred.scRef)
+mydata <- data.frame(stringsAsFactors = F)
+table.true <- table(true.tags)
+for (label1 in rownames(mytable)) {
+    row.sum <- table.true[label1]
+    for (label2 in colnames(mytable)) {
+        mydata <- rbind(mydata, data.frame(origin = label1, annotation = label2, 
+                                           count = mytable[label1, label2], 
+                                           prop = mytable[label1, label2]/row.sum))
+    }
+}
+mydata$origin <- factor(mydata$origin, 
+                        levels = c(colnames(mytable), "acinar", "epsilon", "mast", "t_cell"))
+mydata$annotation <- factor(mydata$annotation,
+                            levels = colnames(mytable))
+
+plot.heatmap <- 
+    ggplot(data = mydata, aes(x = origin, y = annotation)) + 
+    geom_tile(aes(fill = prop)) + 
+    scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    labs(fill = 'Proportion') + 
+    theme_bw() +
+    theme(
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
+    ) + 
+    geom_text(aes(label = round(prop, 2)), family = "Arial", size = 2.5)
+ggsave(filename = paste0('heatmap_', ref.dataset, '_', dataset, '_', method, '.png'), 
+       path = path.res, plot = plot.heatmap,
+       units = 'cm', height = 16, width = 22)

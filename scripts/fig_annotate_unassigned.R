@@ -16,7 +16,7 @@ file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_merged.
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 exp_Tasic <- OUT$data.filter
 label_Tasic <- OUT$label.filter
-ref.labels <-label_Tasic$label.unlabeled.use.cols...
+ref.labels <-label_Tasic[,1]
 ref.mtx <- exp_Tasic
 ref.dataset <- 'Tasic'
 

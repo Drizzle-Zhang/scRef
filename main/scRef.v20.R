@@ -700,7 +700,12 @@
     if (!is.null(count.neg)) {
         cell.exp <- select.exp[, vec.tag1 == cell]
         mat.in <- cbind(cell.exp, count.neg)
-        tag.in <- c(rep(cell, ncol(cell.exp)), rep('Negative', ncol(count.neg)))
+        if (sum(vec.tag1 == cell) == 1) {
+            ncol.cell <- 1
+        } else {
+            ncol.cell <- ncol(cell.exp)
+        }
+        tag.in <- c(rep(cell, ncol.cell), rep('Negative', ncol(count.neg)))
         seurat.neg.cell <- CreateSeuratObject(counts = mat.in, project = "Ref")
         seurat.neg.cell <- NormalizeData(seurat.neg.cell, verbose = F)
         seurat.neg.cell@meta.data$original.label <- tag.in
@@ -801,7 +806,6 @@
     
     
     topN <- base.topN
-    list.cell.genes <- list()
     cl = makeCluster(CPU, outfile = '')
     clusterExport(cl, '.getDEgeneF')
     RUN <- parLapply(
@@ -1248,7 +1252,7 @@
 }
 
 
-.cutoff_GMM_add_neg <- function(df.tags.in, num_cluster = 6, cutoff.neg = 5, 
+.cutoff_GMM_add_neg <- function(df.tags.in, num_cluster = NULL, cutoff.neg = 5, 
                                 cutoff.pos = 5, ceiling.cutoff = 30, 
                                 opt.strict = F, opt.negative = F) {
     library(mclust, verbose = F)
@@ -1259,7 +1263,7 @@
         cell <- cells[i]
         print(cell)
         df.sub <- df.tags.in[df.tags.in$scRef.tag == cell, ]
-        if (length(unique(df.sub$log10Pval)) < 6) {
+        if (length(unique(df.sub$log10Pval)) < 5) {
             vec.cutoff <- c(vec.cutoff, (ceiling.cutoff + cutoff.pos)/2)
             if (opt.negative) {
                 neg.cutoff <- NA
@@ -1271,7 +1275,7 @@
             model <- densityMclust(df.sub$log10Pval, verbose = F)
         } else {
             model <- densityMclust(df.sub$log10Pval, 
-                                   G = min(num_cluster, round(length(unique(df.sub$log10Pval))/6)), 
+                                   G = min(num_cluster, round(length(unique(df.sub$log10Pval))/5)), 
                                    verbose = F)
         }
         cluster.mean <- model$parameters$mean[order(model$parameters$mean)]
@@ -1306,9 +1310,11 @@
         cluster.unknown <- names(cluster.mean[cluster.mean < cutoff.pos])
         if (opt.strict) {
             cluster.known <- names(cluster.mean[cluster.mean > ceiling.cutoff])
-            if (length(cluster.known) == 0) {
-                cluster.known <- setdiff(all.clusters, cluster.unknown)
-                cluster.known <- cluster.known[length(cluster.known)]
+            if (sum(model$classification %in% cluster.known) < 5) {
+                clusters.known <- setdiff(setdiff(all.clusters, cluster.unknown), cluster.known)
+                if (length(clusters.known) > 0) {
+                    cluster.known <- c(clusters.known[length(clusters.known)], cluster.known)
+                }
             }
         } else {
             cluster.known <- setdiff(all.clusters, cluster.unknown)
@@ -1320,7 +1326,7 @@
                         cluster.final <- c(cluster.final, cluster)
                         next()
                     }
-                    if ((cluster.mean[cluster] + 15) > cluster.mean[cluster.known[j + 1]]) {
+                    if ((cluster.mean[cluster] + 20) > cluster.mean[cluster.known[j + 1]]) {
                         cluster.final <- c(cluster.final, cluster)
                     } else {
                         break()
@@ -1337,6 +1343,9 @@
         if (opt.strict) {
             # sub.cutoff <- cluster.mean[cluster.known[1]]
             sub.cutoff <- median(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
+            if (sum(model$classification %in% cluster.known) < 10) {
+                sub.cutoff <- min(df.sub[df.sub$classification == cluster.known[1], 'log10Pval'])
+            }
         } else {
             sub.cutoff <-
                 min(df.sub[df.sub$classification %in% cluster.known, 'log10Pval'])
@@ -1405,9 +1414,10 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
                   method1 = 'kendall', method2 = 'multinomial', 
                   corr_use_HVGene1 = 2000, corr_use_HVGene2 = 2000,
                   # cutoff.1 = 'default', cutoff.2 = 'default', 
-                  GMM.num_cluster = NULL, GMM.neg_cutoff = 5, GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 30,
+                  GMM.num_cluster = NULL, GMM.neg_cutoff = NULL, 
+                  GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 30,
                   threshold.recall = 0.2,
-                  min_cell = 20, CPU = 4, mod = 'debug') {
+                  min_cell = 20, CPU = 4, mod = '') {
     library(parallel, verbose = F)
     # check parameters
     if (!type_ref %in% c('sc-counts', 'sum-counts', 'fpkm', 'tpm', 'rpkm')) {
@@ -1415,6 +1425,9 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
     }
     cutoff.1 = 'default'
     cutoff.2 = 'default'
+    if (is.null(GMM.neg_cutoff)) {
+        GMM.neg_cutoff <- GMM.floor_cutoff
+    }
     
     time1 <- Sys.time()
     # get sum-counts format
@@ -1784,7 +1797,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         if (cutoff.2 == 'default') {
             diff.log10Pval <- df.tags2[select.barcode, 'log10Pval'] - 
                 df.tags1[select.barcode, 'log10Pval']
-            min.diff <- boxplot.stats(diff.log10Pval, coef = 1)$stats[1]
+            min.diff <- max(0, boxplot.stats(diff.log10Pval, coef = 1)$stats[1])
             out.cutoff.2 <- .cutoff_GMM_add_neg(df.tags, num_cluster = GMM.num_cluster, 
                                               cutoff.neg = GMM.neg_cutoff, 
                                               cutoff.pos = GMM.floor_cutoff + min.diff,
@@ -1983,9 +1996,9 @@ annotate.UnassignedCell <- function(result.scref, exp_sc_mat, atlas = 'MCA', CPU
     exp.unassigned <- exp_sc_mat[, cell_id.unassigned]
 
     # read atlas
+    setwd('~/my_git/scRef')
     df.atlas <- .imoprt_outgroup(atlas, normalization = F)
 
-    setwd('~/my_git/scRef')
     result.unassign <- SCREF(exp.unassigned, df.atlas,
                           type_ref = 'sum-counts', use.RUVseq = F, 
                           corr_use_HVGene1 = 2000, corr_use_HVGene2 = NULL, 
@@ -2013,3 +2026,4 @@ transform.HomoloGene <- function(exp_sc_mat, inTaxID = 9606, outTaxID = 10090) {
     rownames(exp.out) <- genes.homo
     return(exp.out)
 }
+

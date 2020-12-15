@@ -37,7 +37,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
   #                               scRef                                     #
   #############################################################################
   # source('/home/drizzle_zhang/my_git/scRef/main/scRef.v12.R')
-  source('/home/zy/my_git/scRef/main/scRef.v17.R')
+  source('/home/zy/my_git/scRef/main/scRef.v20.R')
   True_Labels_scRef <- list()
   Pred_Labels_scRef <- list()
   Total_Time_scRef <- list()
@@ -66,6 +66,7 @@ run_scRef<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,
         use.RUVseq = T,
         cluster.speed = F,
         min_cell = 1,
+        GMM.ceiling_cutoff = 20,
         threshold.recall = 0.5,
         CPU = 10
       )
