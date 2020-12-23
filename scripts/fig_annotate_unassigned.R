@@ -24,12 +24,10 @@ ref.dataset <- 'Tasic'
 ############### Habib
 path.input <- '/home/zy/scRef/summary/'
 path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
-dataset <- 'Habib'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
+dataset <- 'Campbell'
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Habib <- OUT$data.filter
-label_Habib <- OUT$label.filter
+exp_Habib <- OUT$mat_exp
+label_Habib <- OUT$label
 exp_sc_mat <- exp_Habib
 label_sc <- label_Habib
 

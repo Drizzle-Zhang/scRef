@@ -4,7 +4,7 @@ library(gridExtra)
 ref.dataset <- c('Tasic', 'MCA')
 ref.GSE_id <- c('GSE71585', 'GSE108097')
 
-sc.dataset <- c('Tasic2018', 'Habib', 'HochgernerA', 'Mizrak')
+sc.dataset <- c('Tasic2018', 'Campbell', 'HochgernerA', 'Mizrak')
 sc.GSE_id <- c('GSE115746', 'GSE93374', 'GSE95315', 'GSE109447')
 
 path.res <- '/home/zy/scRef/Benchmark/mouse_brain/'
@@ -72,7 +72,7 @@ for (i in 1:length(ref.dataset)) {
            units = 'cm', height = 12, width = 16)
 }
 
-# Accuracy
+# Accuracy (rm)
 for (i in 1:length(ref.dataset)) {
     ref.data <- ref.dataset[i]
     ref.GSE <- ref.GSE_id[i]
@@ -82,7 +82,7 @@ for (i in 1:length(ref.dataset)) {
         sc.GSE <- sc.GSE_id[j]
         file.res <- paste0(path.res, 'results_', ref.data, '_', sc.data, '.txt')
         sub.res <- read.delim(file = file.res, row.names = 1, stringsAsFactors = F)
-        sub.res <- sub.res[sub.res$term == 'Accuracy',]
+        sub.res <- sub.res[sub.res$term == 'Accuracy (remove unassigned)',]
         acc.scRef <- sub.res[sub.res$method == 'scMAGIC', 'value']
         sub.plot <- data.frame(other = sub.res[sub.res$method != 'scMAGIC', 'value'], 
                                scRef = rep(acc.scRef, nrow(sub.res)-1), 
@@ -95,10 +95,11 @@ for (i in 1:length(ref.dataset)) {
         geom_point(size = 3) + 
         geom_abline(intercept = 0, slope = 1, linetype = 2) + 
         ylim(0, 1) + 
-        labs(x = 'Accuracy(Other method)', y = 'Accuracy(scMAGIC)', 
+        labs(x = 'Accuracy(Other method, remove unassigned cells)', 
+             y = 'Accuracy(scMAGIC, remove unassigned cells)', 
              shape = 'Query dataset', color = 'Method') + 
         theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
-    ggsave(filename = paste0('scatter_', ref.data, '.png'), 
+    ggsave(filename = paste0('scatter_Accuracy_rm_', ref.data, '.png'), 
            path = path.fig, plot = plot.scatter,
            units = 'cm', height = 12, width = 16)
 }
@@ -145,16 +146,25 @@ plot.heatmap <- function(ref.dataset, dataset, true.tags, path.res, path.fig, me
 }
 
 ref.dataset <- 'Tasic'
-dataset <- 'Habib'
+dataset <- 'Campbell'
 OUT <- readRDS(paste0(path.res, dataset, '.Rdata'))
-label_sc <- OUT$label.filter
-true.tags <- label_sc$label.unlabeled.use.cols...
+label_sc <- OUT$label
+true.tags <- label_sc[,1]
 names.ref <- c('Neuron', 'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 
                'Microglia', 'Endothelial Cell', 'Astrocyte')
-names.sc <- c('Neurons', 'Oligodend', 'OPC', 'microglia', 'EndothelialCells', 'Astrocyte', 
-              'Ependymocytes', 'Fibroblast', 'MuralCells', 'ParsTuber', 'Tanycyte')
+names.sc <- c('Neurons', 'Oligodendrocytes', 'OPC', 'PVMs & Microglia', 
+              'Endothelial cells', 'Astrocytes', 
+              'Ependymocytes', 'VLMCs', 'Mural cells', 'Pars tuberalis', 'Tanycytes')
 
-method <- 'scRef'
+ref.dataset <- 'MCA'
+names.ref <- c('Neuron', 'Myelinating oligodendrocyte', 'Oligodendrocyte precursor cell', 
+               'Microglia', 'Macrophage', 'Astrocyte', 'Hypothalamic ependymal cell',
+               'Astroglial cell', 'Granulocyte', 'Schwann cell')
+names.sc <- c('Neurons', 'Oligodendrocytes', 'OPC', 'PVMs & Microglia', 
+              'Astrocytes', 'Ependymocytes', 
+              'VLMCs','Endothelial cells',  'Mural cells', 'Pars tuberalis', 'Tanycytes')
+
+method <- 'scMAGIC'
 plot.heatmap(ref.dataset, dataset, true.tags, path.res, path.fig, method, names.sc, names.ref)
 
 method <- 'sciBet'

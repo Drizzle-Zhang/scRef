@@ -5,35 +5,6 @@ use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 py_module_available('sklearn')
 metrics <- import('sklearn.metrics')
 
-# function of data preparation
-prepare.data <- function(file.data.unlabeled, file.label.unlabeled, 
-                         del.label = c('miss')) {
-    library(stringr)
-    data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-    data.unlabeled <- floor(data.unlabeled)
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-    # read label file
-    file.label.unlabeled <- file.label.unlabeled
-    label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-    col.name1 <- names(data.unlabeled)[1]
-    if (substring(col.name1, 1, 1) == 'X') {
-        row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-    }
-    # filter data
-    use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-    data.filter <- data.unlabeled[,use.cols]
-    label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-    
-    OUT <- list()
-    OUT$data.filter <- data.filter
-    OUT$label.filter <- label.filter
-    return(OUT)
-    
-}
-
 # evaluation
 simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     # uniform tags
@@ -95,7 +66,7 @@ simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     
 }
 
-source('/home/zy/my_git/scRef/main/scRef.v18.R')
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
 
 ############# regard sc-counts data as reference
 library(stringr)
@@ -122,12 +93,12 @@ dataset <- 'HochgernerA'
 # data.filter <- apply(data.filter, 2, as.numeric)
 # rownames(data.filter) <- genes
 # OUT <- list()
-# OUT$label.filter <- label.filter
-# OUT$data.filter <- data.filter
+# OUT$label <- label.filter[!(label.filter[,2] %in% c('Cck-Tox', 'Radial_Glia-like')), ]
+# OUT$mat_exp <- data.filter[, !(label.filter[,2] %in% c('Cck-Tox', 'Radial_Glia-like'))]
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Hochgerner <- OUT$data.filter
-label_Hochgerner <- OUT$label.filter
+exp_Hochgerner <- OUT$mat_exp
+label_Hochgerner <- OUT$label
 exp_sc_mat <- exp_Hochgerner
 label_sc <- label_Hochgerner
 
@@ -135,27 +106,26 @@ ref.names <- unique(ref.labels)
 # list of cell names
 all.cell <- unique(label_sc[,2])
 uniform.names <- c("Oligodendrocyte", "Microglia", "Astrocyte", "Neuron",
-                   "Macrophage", "Granulocyte", "OPC",
+                   "PVM", "Granulocyte", "OPC",
                    "Schwann cell", "Astrocyte", "Ependymal")
 df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
-uniform.names <- c("Unassigned", "Unassigned", "Unassigned", "Microglia", "Macrophage", 
+uniform.names <- c("Unassigned", "Unassigned", "Unassigned", "Microglia", "PVM", 
                    "Oligodendrocyte", "Unassigned", "OPC", "Astrocyte", "Unassigned", 
-                   "Unassigned", "Unassigned", "Unassigned", "Neuron", "Neuron", 
-                   "Neuron", "Neuron", "Neuron", "Neuron", "Neuron",
-                   "Neuron", "Unassigned")
+                   "Unassigned", "Unassigned", "Neuron", "Neuron", 
+                   "Neuron", "Neuron", "Neuron", "Neuron", "Neuron", "Unassigned")
 df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
 ### scRef
-source('/home/zy/my_git/scRef/main/scRef.v18.R')
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
                       cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
-pred.scRef <- result.scref$final.out$scRef.tag
-saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
+pred.scMAGIC <- result.scref$final.out$scRef.tag
+saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
 
 ### sciBet
 suppressMessages(library(tidyverse))
@@ -296,23 +266,23 @@ saveRDS(pred.scClassify,
 true.tags <- label_sc[,2]
 df.plot <- data.frame(stringsAsFactors = F)
 
-rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
-pred.scRef <- readRDS(rda.scRef)
-res.scRef <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.names)
-df.sub <- data.frame(term = 'Weighted macro F1', method = 'scRef',
-                     value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
+rda.scMAGIC <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
+pred.scMAGIC <- readRDS(rda.scMAGIC)
+res.scMAGIC <- simple.evaluation(true.tags, pred.scMAGIC, df.ref.names, df.sc.names)
+df.sub <- data.frame(term = 'Weighted macro F1', method = 'scMAGIC',
+                     value = res.scMAGIC$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Macro F1', method = 'scRef',
-                           value = res.scRef$macro_f1, stringsAsFactors = F))
+                data.frame(term = 'Macro F1', method = 'scMAGIC',
+                           value = res.scMAGIC$macro_f1, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'scRef',
-                           value = res.scRef$accuracy, stringsAsFactors = F))
+                data.frame(term = 'Accuracy', method = 'scMAGIC',
+                           value = res.scMAGIC$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scRef',
-                           value = res.scRef$accuracy.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'Accuracy (remove unassigned)', method = 'scMAGIC',
+                           value = res.scMAGIC$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scRef',
-                           value = res.scRef$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'Mean precision (remove unassigned)', method = 'scMAGIC',
+                           value = res.scMAGIC$mean.precision.rm.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
@@ -507,7 +477,7 @@ plot.bar <- ggplot(df.plot,
           panel.grid = element_blank(),
           panel.grid.major.y = element_line(color = 'grey', size = 0.2),
           axis.text.x = element_text(angle = 45, hjust = 1),
-          axis.title = element_text(size = 12)) 
+          axis.title = element_text(size = 12))
 ggsave(filename = paste0(ref.dataset, '_', dataset, '.png'), 
        path = path.output, plot = plot.bar,
        units = 'cm', height = 12, width = 24)

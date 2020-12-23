@@ -93,8 +93,8 @@ path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
 dataset <- 'Tasic'
 file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_merged.txt')
-OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
-saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
+# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 exp_Tasic <- OUT$mat_exp
 label_Tasic <- OUT$label

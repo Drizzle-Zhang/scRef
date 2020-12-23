@@ -1289,6 +1289,7 @@
         
         # negative cutoff
         if (opt.negative) {
+            cutoff.neg <- max(0, cutoff.neg-2)
             cluster.neg <- names(cluster.mean[cluster.mean < cutoff.neg])
             if (length(cluster.neg) == 0) {
                 neg.cutoff <- NA
@@ -1797,7 +1798,7 @@ SCREF <- function(exp_sc_mat, exp_ref_mat, exp_ref_label = NULL,
         if (cutoff.2 == 'default') {
             diff.log10Pval <- df.tags2[select.barcode, 'log10Pval'] - 
                 df.tags1[select.barcode, 'log10Pval']
-            min.diff <- max(0, boxplot.stats(diff.log10Pval, coef = 1)$stats[1])
+            min.diff <- max(0, boxplot.stats(diff.log10Pval, coef = 1.5)$stats[1])
             out.cutoff.2 <- .cutoff_GMM_add_neg(df.tags, num_cluster = GMM.num_cluster, 
                                               cutoff.neg = GMM.neg_cutoff, 
                                               cutoff.pos = GMM.floor_cutoff + min.diff,

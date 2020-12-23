@@ -28,8 +28,8 @@ prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
     label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
     
     OUT <- list()
-    OUT$data.filter <- data.filter
-    OUT$label.filter <- label.filter
+    OUT$mat_exp <- data.filter
+    OUT$label <- label.filter
     return(OUT)
     
 }
@@ -106,8 +106,8 @@ file.label.unlabeled <- paste0(path.input, dataset, '/cell_meta.txt')
 # OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-ref.mtx <- OUT$data.filter
-ref.labels <- OUT$label.filter$label.unlabeled.use.cols...
+ref.mtx <- OUT$mat_exp
+ref.labels <- OUT$label[,1]
 ref.dataset <- 'BaronM'
 
 ############### import unlabeled data
@@ -118,14 +118,14 @@ data("panc8")
 dataset <- 'panc8_celseq2'
 file.save <- paste0(path.output, dataset, '.Rdata')
 # OUT <- list()
-# OUT$data.filter <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('celseq2')])
-# OUT$label.filter <- data.frame(
+# OUT$mat_exp <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('celseq2')])
+# OUT$label <- data.frame(
 #     annotations = as.character(panc8$celltype)[panc8$dataset %in% c('celseq2')],
-#     row.names = colnames(OUT$data.filter))
+#     row.names = colnames(OUT$mat_exp))
 # saveRDS(OUT, file = file.save)
 OUT <- readRDS(file.save)
-exp_sc_mat <- OUT$data.filter
-label_sc <- OUT$label.filter
+exp_sc_mat <- OUT$mat_exp
+label_sc <- OUT$label
 
 # ref.names <- unique(ref.labels)
 # # list of cell names
@@ -146,23 +146,27 @@ label_sc <- OUT$label.filter
 ### scRef
 source('/home/zy/my_git/scRef/main/scRef.v20.R')
 exp_sc_mat <- transform.HomoloGene(exp_sc_mat)
-setwd('~/my_git/scRef')
+setwd('/home/zy/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
                       cluster.speed = F, cluster.resolution = 1,
-                      GMM.num_cluster = 3, GMM.neg_cutoff = 1, GMM.floor_cutoff = 2, GMM.ceiling_cutoff = 10,
+                      GMM.num_cluster = 3, GMM.floor_cutoff = 2, GMM.ceiling_cutoff = 10,
                       min_cell = 1, CPU = 10)
-pred.scRef <- result.scref$final.out$scRef.tag
+pred.scMAGIC <- result.scref$final.out$scRef.tag
+saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
+
+rda.scMAGIC <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
+pred.scMAGIC <- readRDS(rda.scMAGIC)
 
 true.tags <- label_sc$annotations
-table(true.tags, pred.scRef)
+table(true.tags, pred.scMAGIC)
 
 library(ggplot2)
 path.res <- '/home/zy/scRef/figure/cross_species'
 
 # heatmap
-method <- 'scRef'
-mytable <- table(true.tags, pred.scRef)
+method <- 'scMAGIC'
+mytable <- table(true.tags, pred.scMAGIC)
 mydata <- data.frame(stringsAsFactors = F)
 table.true <- table(true.tags)
 for (label1 in rownames(mytable)) {
@@ -181,7 +185,8 @@ mydata$annotation <- factor(mydata$annotation,
 plot.heatmap <- 
     ggplot(data = mydata, aes(x = origin, y = annotation)) + 
     geom_tile(aes(fill = prop)) + 
-    scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    # scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    scale_fill_gradient2(low = "#4169E1", high = "#FF4500", mid = '#FFCC00', midpoint = 0.5) + 
     labs(fill = 'Proportion') + 
     theme_bw() +
     theme(
@@ -200,7 +205,7 @@ ggsave(filename = paste0('heatmap_', ref.dataset, '_', dataset, '_', method, '.p
 ### original plot
 library(Seurat)
 # data preparing
-exp_sc_mat <- OUT$data.filter
+exp_sc_mat <- OUT$mat_exp
 seurat.unlabeled <- CreateSeuratObject(counts = exp_sc_mat)
 seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize", 
                                   scale.factor = 10000)
@@ -211,7 +216,7 @@ seurat.unlabeled <- ScaleData(seurat.unlabeled)
 use.cells <- dimnames(seurat.unlabeled@assays$RNA@counts)[[2]]
 names(label_sc) <- 'cell_type'
 seurat.unlabeled@meta.data$original.label <- label_sc[use.cells, 'cell_type']
-seurat.unlabeled@meta.data$scRef.tag <- pred.scRef
+seurat.unlabeled@meta.data$scRef.tag <- pred.scMAGIC
 
 # PCA
 seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 100, verbose = F)
@@ -235,10 +240,11 @@ ggsave(filename = paste0('cluster_', ref.dataset, '_', dataset, '.png'),
 # figure2: cluster label
 # DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
 # figure3: scRef plus label
+library(scales)
 plot.umap.scRef <- 
     DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'scRef.tag') + 
     scale_color_manual(values = c(hue_pal()(10), 'gray'),
-                       breaks = c(names(table(pred.scRef)))) + 
+                       breaks = c(names(table(pred.scMAGIC)))) + 
     theme_bw() + 
     theme(axis.text = element_text(size = 9),
           panel.grid = element_blank(),

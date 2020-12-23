@@ -41,9 +41,9 @@ file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
 # OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Habib <- OUT$data.filter
-label_Habib <- OUT$label.filter
+OUT <- readRDS(paste0('/home/zy/scRef/Benchmark/mouse_brain/', dataset, '.Rdata'))
+exp_Habib <- OUT$mat_exp
+label_Habib <- OUT$label
 exp_sc_mat <- exp_Habib
 label_sc <- label_Habib
 
@@ -54,8 +54,8 @@ df.atlas <- .imoprt_outgroup('MCA', normalization = F)
 
 result.scref <- SCREF(exp_sc_mat, df.atlas,
                       type_ref = 'sum-counts', use.RUVseq = F, 
-                      method1 = 'spearman',
-                      cluster.speed = T, cluster.cell = 3,
+                      method1 = 'kendall',
+                      cluster.speed = T, cluster.cell = 5,
                       min_cell = 3, CPU = 8)
 pred.scRef <- result.scref$final.out$scRef.tag
 
@@ -69,13 +69,13 @@ library(ggplot2)
 path.res <- '/home/zy/scRef/figure/atlas_anno'
 
 # heatmap
-method <- 'scRef'
+method <- 'scMAGIC'
 mytable <- table(true.tags, pred.scRef)
 mydata <- data.frame(stringsAsFactors = F)
 table.true <- table(true.tags)
 for (label1 in rownames(mytable)) {
     row.sum <- table.true[label1]
-    for (label2 in colnames(df.atlas)) {
+    for (label2 in c(colnames(df.atlas), "Unassigned")) {
         if (label2 %in% colnames(mytable)) {
             mydata <- rbind(mydata, data.frame(origin = label1, annotation = label2, 
                                                count = mytable[label1, label2], 
@@ -87,18 +87,21 @@ for (label1 in rownames(mytable)) {
     }
 }
 mydata$origin <- factor(mydata$origin, levels = c(rownames(mytable)))
-ref.cells <- c("Astrocyte", "Astroglial cell", "Hypothalamic ependymal cell", 
-               "Interstitial macrophage", "Microglia",
+ref.cells <- c("Unassigned", 
+               "Astrocyte", "Astroglial cell", 
                "Vascular endothelial cell", 
                "Ovarian vascular surface endothelium cell",
-               "Granule neuron", "Oligodendrocyte precursor cell", "Unassigned")
+               "Hypothalamic ependymal cell", 
+               "Dopaminergic neurons", "Ganglion cell", "Granule neuron", "Hippocampus neuron",
+               "Interstitial macrophage", "Microglia",
+               "Oligodendrocyte precursor cell")
 mydata$annotation <- factor(mydata$annotation, 
                             levels = c(ref.cells, setdiff(colnames(df.atlas), ref.cells)))
 
 plot.heatmap <- 
     ggplot(data = mydata, aes(x = origin, y = annotation)) + 
     geom_tile(aes(fill = prop)) + 
-    scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    scale_fill_gradient2(low = "#000000", high = "#FFFF00", mid = "#32CD32", midpoint = 0.5) + 
     labs(fill = 'Proportion') + 
     theme_bw() +
     theme(
@@ -107,11 +110,11 @@ plot.heatmap <-
         panel.border = element_blank(),
         axis.title = element_blank(),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
-    ) + 
-    geom_text(aes(label = round(prop, 2)), family = "Arial", size = 2.5)
-ggsave(filename = paste0('heatmap_', ref.dataset, '_', dataset, '_', method, '.png'), 
+    ) 
+    # geom_text(aes(label = round(prop, 2)), family = "Arial", size = 2.5)
+ggsave(filename = paste0('heatmap_allMCA_', dataset, '_', method, '.png'), 
        path = path.res, plot = plot.heatmap,
-       units = 'cm', height = 16, width = 22)
+       units = 'cm', height = 60, width = 20)
 
 
 

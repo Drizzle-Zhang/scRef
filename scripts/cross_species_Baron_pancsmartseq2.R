@@ -28,8 +28,8 @@ prepare.data <- function(file.data.unlabeled, file.label.unlabeled,
     label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
     
     OUT <- list()
-    OUT$data.filter <- data.filter
-    OUT$label.filter <- label.filter
+    OUT$mat_exp <- data.filter
+    OUT$label <- label.filter
     return(OUT)
     
 }
@@ -103,43 +103,43 @@ path.output <- '/home/zy/scRef/Benchmark/cross_species/'
 dataset <- 'BaronM'
 file.data.unlabeled <- paste0(path.input, dataset, '/cell_exp.txt')
 file.label.unlabeled <- paste0(path.input, dataset, '/cell_meta.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
+# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('immune_other'))
 # saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-ref.mtx <- OUT$data.filter
-ref.labels <- OUT$label.filter$label.unlabeled.use.cols...
+ref.mtx <- OUT$mat_exp
+ref.labels <- OUT$label$label.unlabeled.use.cols...
 ref.dataset <- 'BaronM'
 
 ############### import unlabeled data
-############### BaronH
+############### smartseq2
 library(Seurat)
 library(SeuratData)
 data("panc8")
-dataset <- 'panc8_celseq2'
+dataset <- 'panc8_smartseq2'
 file.save <- paste0(path.output, dataset, '.Rdata')
 # OUT <- list()
-# OUT$data.filter <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('celseq2')])
-# OUT$label.filter <- data.frame(
-#     annotations = as.character(panc8$celltype)[panc8$dataset %in% c('celseq2')],
+# OUT$mat_exp <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('smartseq2')])
+# OUT$label <- data.frame(
+#     annotations = as.character(panc8$celltype)[panc8$dataset %in% c('smartseq2')],
 #     row.names = colnames(OUT$data.filter))
 # saveRDS(OUT, file = file.save)
 OUT <- readRDS(file.save)
-exp_sc_mat <- OUT$data.filter
-label_sc <- OUT$label.filter
+exp_sc_mat <- OUT$mat_exp
+label_sc <- OUT$label
 
-ref.names <- unique(ref.labels)
-# list of cell names
-all.cell <- unique(label_sc[,1])
-uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
-                   "Oligo/OPC", "Oligo/OPC")
-df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
-uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Neuron", "Neuron", "Neuron", 
-                   "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
-                   "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
-                   "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
-                   "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
-df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
+# ref.names <- unique(ref.labels)
+# # list of cell names
+# all.cell <- unique(label_sc[,1])
+# uniform.names <- c("Neuron", "Endothelial Cell", "Astrocyte", "Microglia/PVM", 
+#                    "Oligo/OPC", "Oligo/OPC")
+# df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
+# uniform.names <- c("Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Neuron", "Neuron", "Neuron", 
+#                    "Oligo/OPC", "Neuron", "Neuron", "Neuron", 
+#                    "Neuron", "Endothelial Cell", "Neuron", "Astrocyte", 
+#                    "Neuron", "Unassigned", "Neuron", "Microglia/PVM", 
+#                    "Neuron", "Unassigned", "Unassigned", "Neuron",  "Neuron")
+# df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
@@ -149,13 +149,61 @@ exp_sc_mat <- transform.HomoloGene(exp_sc_mat)
 setwd('~/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = F, cluster.resolution = 1,
-                      GMM.num_cluster = 3, GMM.neg_cutoff = 1, GMM.floor_cutoff = 2, GMM.ceiling_cutoff = 10,
+                      # method1 = 'spearman',
+                      corr_use_HVGene1 = 5000, corr_use_HVGene2 = 5000,
+                      cluster.speed = F, cluster.resolution = 1, 
+                      GMM.num_cluster = 3, GMM.floor_cutoff = 1.3, GMM.ceiling_cutoff = 10,
                       min_cell = 1, CPU = 10)
-pred.scRef <- result.scref$final.out$scRef.tag
+pred.scMAGIC <- result.scref$final.out$scRef.tag
+saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
 
-true.tags <- label_sc$annotations
-table(true.tags, pred.scRef)
+rda.scMAGIC <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
+pred.scMAGIC <- readRDS(rda.scMAGIC)
+
+true.tags <- label_sc[,1]
+table(true.tags, pred.scMAGIC)
+# df.view <- merge(label_sc, df.tags, by = 'row.names')
+# View(df.view)
+
+library(ggplot2)
+path.res <- '/home/zy/scRef/figure/cross_species'
+
+# heatmap
+method <- 'scMAGIC'
+mytable <- table(true.tags, pred.scMAGIC)
+mydata <- data.frame(stringsAsFactors = F)
+table.true <- table(true.tags)
+for (label1 in rownames(mytable)) {
+    row.sum <- table.true[label1]
+    for (label2 in colnames(mytable)) {
+        mydata <- rbind(mydata, data.frame(origin = label1, annotation = label2, 
+                                           count = mytable[label1, label2], 
+                                           prop = mytable[label1, label2]/row.sum))
+    }
+}
+mydata$origin <- factor(mydata$origin, 
+                        levels = c(colnames(mytable), "acinar", "epsilon", "mast", "t_cell"))
+mydata$annotation <- factor(mydata$annotation,
+                            levels = colnames(mytable))
+
+plot.heatmap <- 
+    ggplot(data = mydata, aes(x = origin, y = annotation)) + 
+    geom_tile(aes(fill = prop)) + 
+    # scale_fill_continuous(low = "#FFFAFA", high = "#A52A2A") + 
+    scale_fill_gradient2(low = "#4169E1", high = "#FF4500", mid = '#FFCC00', midpoint = 0.5) + 
+    labs(fill = 'Proportion') + 
+    theme_bw() +
+    theme(
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
+    ) + 
+    geom_text(aes(label = round(prop, 2)), family = "Arial", size = 2.5)
+ggsave(filename = paste0('heatmap_', ref.dataset, '_', dataset, '_', method, '.png'), 
+       path = path.res, plot = plot.heatmap,
+       units = 'cm', height = 16, width = 22)
 
 ### original plot
 library(Seurat)
@@ -179,8 +227,6 @@ seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 100, verbose = F)
 # UMAP
 seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:20, n.neighbors = 30)
 
-library(ggplot2)
-path.res <- '/home/zy/scRef/figure/cross_species'
 # figure1: ture label
 plot.umap <- 
     DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'original.label') + 
