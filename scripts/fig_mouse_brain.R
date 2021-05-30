@@ -3,9 +3,17 @@ library(gridExtra)
 
 ref.dataset <- c('Tasic', 'MCA')
 ref.GSE_id <- c('GSE71585', 'GSE108097')
+ref.legend <- c('Tasic, Primary visual cortex, FACS+SMARTer', 
+                'Han, Brain, Microwell-seq')
 
 sc.dataset <- c('Tasic2018', 'Campbell', 'HochgernerA', 'Mizrak')
 sc.GSE_id <- c('GSE115746', 'GSE93374', 'GSE95315', 'GSE109447')
+sc.legends <- c('Tasic, Neocortex, SMART-Seq v4',
+               'Campbell, hypothalamic Arc-ME, Drop-seq',
+               'Hochgerner, Denatate gyrus, 10X',
+               'Mizrak, V-SVZ, Drop-seq')
+# sc.legends <- c('Tasic (SMART-Seq v4)', 'Campbell (Drop-seq)', 
+#                 'Hochgerner (10X)', 'Mizrak (Drop-seq)')
 
 path.res <- '/home/zy/scRef/Benchmark/mouse_brain/'
 path.fig <- '/home/zy/scRef/figure/mouse_brain'
@@ -18,6 +26,7 @@ for (i in 1:length(ref.dataset)) {
     for (j in 1:length(sc.dataset)) {
         sc.data <- sc.dataset[j]
         sc.GSE <- sc.GSE_id[j]
+        sc.legend <- sc.legends[j]
         file.res <- paste0(path.res, 'results_', ref.data, '_', sc.data, '.txt')
         sub.res <- read.delim(file = file.res, row.names = 1, stringsAsFactors = F)
         sub.res <- sub.res[sub.res$term == 'Accuracy',]
@@ -25,7 +34,7 @@ for (i in 1:length(ref.dataset)) {
         sub.plot <- data.frame(other = sub.res[sub.res$method != 'scMAGIC', 'value'], 
                                scRef = rep(acc.scRef, nrow(sub.res)-1), 
                                method = sub.res[sub.res$method != 'scMAGIC', 'method'],
-                               dataset = rep(sc.GSE, nrow(sub.res)-1))
+                               dataset = rep(sc.legend, nrow(sub.res)-1))
         df.plot <- rbind(df.plot, sub.plot)
     }
     plot.scatter <- 
@@ -38,7 +47,7 @@ for (i in 1:length(ref.dataset)) {
         theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
     ggsave(filename = paste0('scatter_', ref.data, '.png'), 
            path = path.fig, plot = plot.scatter,
-           units = 'cm', height = 12, width = 16)
+           units = 'cm', height = 12, width = 18)
 }
 
 # Macro F1
@@ -49,6 +58,7 @@ for (i in 1:length(ref.dataset)) {
     for (j in 1:length(sc.dataset)) {
         sc.data <- sc.dataset[j]
         sc.GSE <- sc.GSE_id[j]
+        sc.legend <- sc.legends[j]
         file.res <- paste0(path.res, 'results_', ref.data, '_', sc.data, '.txt')
         sub.res <- read.delim(file = file.res, row.names = 1, stringsAsFactors = F)
         sub.res <- sub.res[sub.res$term == 'Macro F1',]
@@ -56,7 +66,7 @@ for (i in 1:length(ref.dataset)) {
         sub.plot <- data.frame(other = sub.res[sub.res$method != 'scMAGIC', 'value'], 
                                scRef = rep(acc.scRef, nrow(sub.res)-1), 
                                method = sub.res[sub.res$method != 'scMAGIC', 'method'],
-                               dataset = rep(sc.GSE, nrow(sub.res)-1))
+                               dataset = rep(sc.legend, nrow(sub.res)-1))
         df.plot <- rbind(df.plot, sub.plot)
     }
     plot.scatter <- 
@@ -69,7 +79,7 @@ for (i in 1:length(ref.dataset)) {
         theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
     ggsave(filename = paste0('scatter_MacroF1_', ref.data, '.png'), 
            path = path.fig, plot = plot.scatter,
-           units = 'cm', height = 12, width = 16)
+           units = 'cm', height = 12, width = 18)
 }
 
 # Accuracy (rm)
@@ -80,6 +90,7 @@ for (i in 1:length(ref.dataset)) {
     for (j in 1:length(sc.dataset)) {
         sc.data <- sc.dataset[j]
         sc.GSE <- sc.GSE_id[j]
+        sc.legend <- sc.legends[j]
         file.res <- paste0(path.res, 'results_', ref.data, '_', sc.data, '.txt')
         sub.res <- read.delim(file = file.res, row.names = 1, stringsAsFactors = F)
         sub.res <- sub.res[sub.res$term == 'Accuracy (remove unassigned)',]
@@ -87,7 +98,7 @@ for (i in 1:length(ref.dataset)) {
         sub.plot <- data.frame(other = sub.res[sub.res$method != 'scMAGIC', 'value'], 
                                scRef = rep(acc.scRef, nrow(sub.res)-1), 
                                method = sub.res[sub.res$method != 'scMAGIC', 'method'],
-                               dataset = rep(sc.GSE, nrow(sub.res)-1))
+                               dataset = rep(sc.legend, nrow(sub.res)-1))
         df.plot <- rbind(df.plot, sub.plot)
     }
     plot.scatter <- 
@@ -101,7 +112,7 @@ for (i in 1:length(ref.dataset)) {
         theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
     ggsave(filename = paste0('scatter_Accuracy_rm_', ref.data, '.png'), 
            path = path.fig, plot = plot.scatter,
-           units = 'cm', height = 12, width = 16)
+           units = 'cm', height = 12, width = 18)
 }
 
 
@@ -111,6 +122,11 @@ plot.heatmap <- function(ref.dataset, dataset, true.tags, path.res, path.fig, me
     pred.scRef <- readRDS(rda.scRef)
     pred.scRef[!(pred.scRef %in% names.ref)] <- 'Unassigned'
     mytable <- table(true.tags, pred.scRef)
+    supp.names <- setdiff(names.ref, colnames(mytable))
+    old.colnames <- colnames(mytable)
+    mytable <- cbind(mytable, matrix(rep(0, length(supp.names)*length(names.sc)), 
+                                     nrow = length(names.sc), ncol = length(supp.names)))
+    colnames(mytable) <- c(old.colnames, supp.names)
     mydata <- data.frame(stringsAsFactors = F)
     table.true <- table(true.tags)
     for (label1 in rownames(mytable)) {
@@ -122,7 +138,7 @@ plot.heatmap <- function(ref.dataset, dataset, true.tags, path.res, path.fig, me
         }
     }
     mydata$origin <- factor(mydata$origin, levels = names.sc)
-    mydata$annotation <- factor(mydata$annotation, levels = c(names.ref, 'Unassigned'))
+    mydata$annotation <- factor(mydata$annotation, levels = names.ref)
     
     plot.heatmap <- 
         ggplot(data = mydata, aes(x = origin, y = annotation)) + 
@@ -151,7 +167,7 @@ OUT <- readRDS(paste0(path.res, dataset, '.Rdata'))
 label_sc <- OUT$label
 true.tags <- label_sc[,1]
 names.ref <- c('Neuron', 'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 
-               'Microglia', 'Endothelial Cell', 'Astrocyte')
+               'Microglia', 'Endothelial Cell', 'Astrocyte', 'Unassigned')
 names.sc <- c('Neurons', 'Oligodendrocytes', 'OPC', 'PVMs & Microglia', 
               'Endothelial cells', 'Astrocytes', 
               'Ependymocytes', 'VLMCs', 'Mural cells', 'Pars tuberalis', 'Tanycytes')
@@ -159,7 +175,7 @@ names.sc <- c('Neurons', 'Oligodendrocytes', 'OPC', 'PVMs & Microglia',
 ref.dataset <- 'MCA'
 names.ref <- c('Neuron', 'Myelinating oligodendrocyte', 'Oligodendrocyte precursor cell', 
                'Microglia', 'Macrophage', 'Astrocyte', 'Hypothalamic ependymal cell',
-               'Astroglial cell', 'Granulocyte', 'Schwann cell')
+               'Unassigned', 'Astroglial cell', 'Granulocyte', 'Schwann cell')
 names.sc <- c('Neurons', 'Oligodendrocytes', 'OPC', 'PVMs & Microglia', 
               'Astrocytes', 'Ependymocytes', 
               'VLMCs','Endothelial cells',  'Mural cells', 'Pars tuberalis', 'Tanycytes')

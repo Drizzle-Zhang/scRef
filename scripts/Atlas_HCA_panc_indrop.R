@@ -1,53 +1,28 @@
+# import python package: sklearn.metrics
+# library(reticulate)
+# use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
+# # py_config()
+# py_module_available('sklearn')
+# metrics <- import('sklearn.metrics')
 
-# function of data preparation
-prepare.data <- function(file.data.unlabeled, file.label.unlabeled, 
-                         del.label = c('miss')) {
-    library(stringr)
-    data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-    data.unlabeled <- floor(data.unlabeled)
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-    # read label file
-    file.label.unlabeled <- file.label.unlabeled
-    label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-    col.name1 <- names(data.unlabeled)[1]
-    if (substring(col.name1, 1, 1) == 'X') {
-        row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-    }
-    # filter data
-    use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-    data.filter <- data.unlabeled[,use.cols]
-    label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-    
-    OUT <- list()
-    OUT$data.filter <- data.filter
-    OUT$label.filter <- label.filter
-    return(OUT)
-    
-}
 
-path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/atlas_anno'
-dataset <- 'Campbell'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-OUT <- readRDS(paste0('/home/zy/scRef/Benchmark/mouse_brain/', dataset, '.Rdata'))
-exp_Habib <- OUT$mat_exp
-label_Habib <- OUT$label
-exp_sc_mat <- exp_Habib
-label_sc <- label_Habib
-
-source('/home/zy/my_git/scRef/main/scRef.v21.R')
-setwd('~/my_git/scRef')
-# df.atlas <- .imoprt_outgroup('MCA', normalization = F)
-# df.atlas <- df.atlas[, colnames(df.atlas) != 'Pan gabaergic']
 library(Seurat)
+library(SeuratData)
+data("panc8")
+exp_sc_mat <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in%
+                                                         c('indrop1', 'indrop2', 'indrop3', 'indrop4')])
+label_sc <- data.frame(
+    annotations = as.character(panc8$celltype)[panc8$dataset %in%
+                                                   c('indrop1', 'indrop2', 'indrop3', 'indrop4')],
+    row.names = colnames(exp_sc_mat))
+dataset <- 'panc8_indrop'
+
+
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
+setwd('~/my_git/scRef')
+# df.atlas <- .imoprt_outgroup('HCA', normalization = F)
 df.out.group <- 
-    read.table('/home/disk/scRef/MouseAtlas_SingleCell_Han2018/combinedMCA/MCA_concat_outer.txt', 
+    read.table('/home/disk/scRef/HumanAtlas_SingleCell_Han2020/combinedHCA/HCA_combined.txt', 
                header = T, row.names = 1, sep = '\t', check.names = F)
 df.out.group[is.na(df.out.group)] <- 0
 seurat.out.group <- 
@@ -56,15 +31,19 @@ seurat.out.group <-
 seurat.out.group <- 
     NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
                   scale.factor = 1e6, verbose = F)
-df.atlas <- as.data.frame(seurat.out.group@assays$RNA@counts)
+df.atlas <- data.frame(seurat.out.group@assays$RNA@counts, check.names = F)
+df.atlas <- df.atlas[, !(colnames(df.atlas) %in%
+                             c('Smooth muscle cell_AdultPancreas'))]
 
 
 result.scref <- SCREF(exp_sc_mat, df.atlas,
-                      type_ref = 'sum-counts', use.RUVseq = F, 
-                      cluster.speed = T, CPU = 4)
+                      type_ref = 'sum-counts', use.RUVseq = F, out.group = 'HCA',
+                      GMM.floor_cutoff = 3, GMM.ceiling_cutoff = 20,
+                      cluster.speed = T, CPU = 4,
+                      cluster.cell = 5, min_cell = 5)
 pred.scRef <- result.scref$final.out$scRef.tag
 
-true.tags <- label_sc$CellType
+true.tags <- label_sc$annotation
 table(true.tags, pred.scRef)
 # df.tags <- result.scref$combine.out
 # df.view <- merge(label_sc, df.tags, by = 'row.names')
@@ -73,18 +52,17 @@ table(true.tags, pred.scRef)
 library(ggplot2)
 path.res <- '/home/zy/scRef/figure/atlas_anno/'
 method <- 'scMAGIC'
-file.pred <- paste0(path.res, 'MCA_', dataset, '_scMAGIC.Rdata')
-saveRDS(pred.scRef, file.pred)
+file.pred <- paste0(path.res, 'HCA_', dataset, '_scMAGIC.Rdata')
+# saveRDS(pred.scRef, file.pred)
 pred.scRef <- readRDS(file.pred)
-true.tags <- label_sc$CellType
+true.tags <- label_sc$annotations
 table(true.tags, pred.scRef)
 
 # simplify colnames of atlas
 df.simple <- data.frame(check.names = F)
 for (col in colnames(df.atlas)) {
-    col.split <- strsplit(col, split = "(", fixed = T)[[1]]
-    col.simple <- col.split[1]
-    # col.simple <- paste(col.split[1:(length(col.split)-1)], collapse = '-')
+    col.split <- strsplit(col, split = '_')[[1]]
+    col.simple <- paste(col.split[1:(length(col.split)-1)], collapse = '-')
     df.simple <- rbind(df.simple, data.frame(col = col,
                                              col.simple = col.simple))
 }
@@ -112,30 +90,30 @@ for (label1 in rownames(mytable.sum)) {
 }
 
 ref.cells <- setdiff(colnames(mytable.sum), 
-                     c("Neuron", "Astroglial cell"))
+                     c("Basal cell", "Beta cell", 
+                       'D cell/ X/A cell', 'Endothelial cell in EMT',
+                       'Endothelial cell-FABP4 high', 'Fibroblast',
+                       'Smooth muscle cell-PDK4 high'))
 set.seed(1234)
 all.cells <- sort(unique(c(sample(setdiff(unique(df.simple$col.simple), ref.cells), 100), 
                            ref.cells, "Unassigned")))
-pos <- c(-1, 2, -1, 2, -1, 0, 0, 0, 0, -3, 0)
+pos <- c(-1, 1, -5, -2, 1, 3, 0, -1, 1, 0)
 pos.cells <- c()
 for (idx in 1:length(ref.cells)) {
     pos.idx <- pos[idx]
     pos.cells <- c(pos.cells, all.cells[which(all.cells==ref.cells[idx])+pos.idx])
 }
-mydata <- mydata[mydata$annotation %in% all.cells,]
-mydata$annotation <- factor(mydata$annotation, levels = all.cells)
+mydata$annotation <- factor(mydata$annotation, levels = c(all.cells))
 mydata$origin <- factor(mydata$origin, 
-                        levels = c("Astrocytes", 
-                                   "Endothelial cells", "Mural cells",
-                                   "Ependymocytes", "PVMs & Microglia", 
-                                   "OPC", "Neurons", 
-                                   "Oligodendrocytes", "Pars tuberalis",
-                                   "Tanycytes", "VLMCs"))
+                        levels = c("acinar", "alpha", "ductal",
+                                   "beta", "delta", "epsilon", "gamma",
+                                   "endothelial", 
+                                   "activated_stellate", "quiescent_stellate", 
+                                   "macrophage", "mast", "schwann"))
 
 plot.heatmap <- 
     ggplot(data = mydata, aes(x = origin, y = annotation)) + 
     geom_tile(aes(fill = prop)) + 
-    # scale_fill_gradient2(low = "#C0C0C0", high = "#FFFF00", mid = "#32CD32", midpoint = 0.5) + 
     scale_fill_gradient2(low = "#FFF5EE", mid = '#EE7700', high = "#B22222", midpoint = 0.5) + 
     labs(fill = 'Proportion') + 
     theme_bw() +
@@ -154,7 +132,7 @@ plot.heatmap <-
         legend.key.size = unit(0.3, 'cm')
     ) + 
     scale_y_discrete(breaks = pos.cells, labels = ref.cells)
-ggsave(filename = paste0('heatmap_MCA_', dataset, '_', method, '.png'), 
+ggsave(filename = paste0('heatmap_HCA_', dataset, '_', method, '.png'), 
        path = path.res, plot = plot.heatmap,
        units = 'cm', height = 10, width = 10)
 
@@ -172,14 +150,16 @@ mytable <- table(true.tags, pred.scRef)
 ref.names <- colnames(mytable)
 all.cell <- names(table(true.tags))
 uniform.names <- 
-    c('Astrocytes', 'Astrocytes', 'Astroglial cell', 'Endothelial cells',
-      'Endothelial cells', 'Neurons', 'Ependymocytes', 'PVMs & Microglia',
-      'Neurons', 'OPC', 'Neurons', 'Unassigned', 'Endothelial cells')
+    c("Exocrine cell", "Endocrine cell", "Basal cell", "Endocrine cell",
+      "D cell/ X/A cell", "ductal", "Endocrine cell", "Endocrine cell", 
+      'Endothelial cell', 'Endothelial cell', 'Endothelial cell', 'Endothelial cell', 
+      'Exocrine cell', 'Fibroblast', 'Smooth muscle cell', 'Stromal cell',
+      'Stromal cell', 'Unassigned')
 df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
 uniform.names <- 
-    c("Astrocytes", "Endothelial cells", "Ependymocytes", "Unassigned",
-      "Neurons", "Oligodendrocytes", "OPC", "Unassigned", "PVMs & Microglia",
-      "Unassigned", "Unassigned")
+    c("Exocrine cell", "Stromal cell", "Endocrine cell", "Endocrine cell",
+      "Endocrine cell", "ductal", "endothelial", "Endocrine cell", 
+      'Endocrine cell', 'macrophage', 'Unassigned', 'Stromal cell', 'schwann')
 df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
@@ -258,13 +238,10 @@ res.scMAGIC <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.name
 file.res.scMAGIC <- paste0(path.res, 'RES_MCA_', dataset, '_scMAGIC.txt')
 # write.table(res.scMAGIC, file.res.scMAGIC)
 saveRDS(res.scMAGIC, file.res.scMAGIC)
-readRDS(file.res.scMAGIC)
+
 
 # $accuracy
-# [1] 0.9464175
+# [1] 0.9400163
 # 
-# $balanced.accuracy
-# [1] 0.8587342
-
 # $accuracy.rm.unassigned
-# [1] 0.9697406
+# [1] 0.9541077

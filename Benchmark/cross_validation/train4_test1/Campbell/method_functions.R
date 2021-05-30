@@ -463,7 +463,7 @@ run_CHETAH<-function(DataPath,LabelsPath,CV_RDataPath,OutputDir,GeneOrderPath = 
             start_time <- Sys.time()
             sce_test <-
                 CHETAHclassifier(input = sce_test,
-                                 ref_cells = sce,
+                                 ref_cells = sce, 
                                  n_genes = NumGenes)
             end_time <- Sys.time()
         }

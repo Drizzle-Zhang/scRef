@@ -1,7 +1,10 @@
 library(ggplot2)
 
 datasets <- c('Campbell', 'panc8_indrop', 'pbmcsca_10Xv2', 'Tasic')
-GSE_ids <- c('GSE93374', 'GSE84133', 'GSE132044', 'GSE71585')
+# GSE_ids <- c('GSE93374', 'GSE84133', 'GSE132044', 'GSE71585')
+GSE_ids <- c('Campbell, Mouse hypothalamic Arc-ME', 
+             'Baron, Human pancreas', 
+             'Ding, PBMC', 'Tasic, Primary visual cortex')
 path.output <- '/home/zy/scRef/cross_validation/train4_test1/'
 path.fig <- '/home/zy/scRef/figure/'
 
@@ -60,7 +63,7 @@ plot.scatter <-
     theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
 ggsave(filename = paste0('scatter_CV.png'), 
        path = path.fig, plot = plot.scatter,
-       units = 'cm', height = 12, width = 16)
+       units = 'cm', height = 12, width = 20)
 
 # Macro F1
 df.plot <- data.frame(stringsAsFactors = F)
@@ -86,7 +89,7 @@ plot.scatter <-
     theme(panel.background = element_rect(fill = 'transparent', color = 'gray'))
 ggsave(filename = paste0('scatter_MacroF1_CV.png'), 
        path = path.fig, plot = plot.scatter,
-       units = 'cm', height = 12, width = 16)
+       units = 'cm', height = 12, width = 20)
 
 
 

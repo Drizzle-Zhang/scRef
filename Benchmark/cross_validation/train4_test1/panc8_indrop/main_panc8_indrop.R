@@ -66,20 +66,24 @@ df.heatmap <- data.frame(stringsAsFactors = F)
 # scRef
 # run_scRef(DataPath,LabelsPath,CV_RDataPath,OutputDir)
 TrueLabelsPath <- paste0(OutputDir, 'scRef_True_Labels.csv')
+# PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels_cell.csv')
 PredLabelsPath <- paste0(OutputDir, 'scRef_Pred_Labels.csv')
 res.scRef <- evaluate(TrueLabelsPath, PredLabelsPath)
 df.sub <- data.frame(term = names(res.scRef$F1), 
-                     method = rep('scRef', length(res.scRef$F1)),
+                     method = rep('scMAGIC', length(res.scRef$F1)),
                      value = res.scRef$F1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'macro F1', method = 'scRef',
+                data.frame(term = 'macro F1', method = 'scMAGIC',
                            value = res.scRef$Mean_F1, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy', method = 'scRef',
+                data.frame(term = 'Accuracy', method = 'scMAGIC',
                            value = res.scRef$Acc, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Weighted macro F1', method = 'scRef',
+                data.frame(term = 'Weighted macro F1', method = 'scMAGIC',
                            value = res.scRef$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scMAGIC',
+                           value = res.scRef$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # SingleR
@@ -99,6 +103,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'SingleR',
                            value = res.SingleR$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'SingleR',
+                           value = res.SingleR$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 
@@ -120,6 +127,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
                            value = res.scmapcell$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scmap-cell',
+                           value = res.scmapcell$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 PredLabelsPath <- paste0(OutputDir, 'scmapcluster_Pred_Labels.csv')
@@ -137,6 +147,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
                            value = res.scmapcluster$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scmap-cluster',
+                           value = res.scmapcluster$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # CHETAH
@@ -156,6 +169,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'CHETAH',
                            value = res.CHETAH$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'CHETAH',
+                           value = res.CHETAH$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # scPred
@@ -175,6 +191,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'scPred',
                            value = res.scPred$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scPred',
+                           value = res.scPred$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # sciBet
@@ -194,6 +213,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'sciBet',
                            value = res.sciBet$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'sciBet',
+                           value = res.sciBet$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # singleCellNet
@@ -213,6 +235,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
                            value = res.singleCellNet$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'singleCellNet',
+                           value = res.singleCellNet$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # CaSTLe
@@ -248,6 +273,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'scID',
                            value = res.scID$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scID',
+                           value = res.scID$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 # scClassify
@@ -267,6 +295,9 @@ df.sub <- rbind(df.sub,
 df.sub <- rbind(df.sub, 
                 data.frame(term = 'Weighted macro F1', method = 'scClassify',
                            value = res.scClassify$WMean_F1, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Balanced accuracy', method = 'scClassify',
+                           value = res.scClassify$balanced_acc, stringsAsFactors = F))
 df.heatmap <- rbind(df.heatmap, df.sub)
 
 unique.term <- unique(df.heatmap$term)

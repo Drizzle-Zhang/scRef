@@ -1,61 +1,41 @@
 # import python package: sklearn.metrics
+library(Seurat)
 library(reticulate)
 use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 # py_config()
 py_module_available('sklearn')
 metrics <- import('sklearn.metrics')
 
-# function of data preparation
-prepare.data <- function(file.data.unlabeled, file.label.unlabeled, 
-                         del.label = c('miss')) {
-    library(stringr)
-    data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-    data.unlabeled <- floor(data.unlabeled)
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-    # read label file
-    file.label.unlabeled <- file.label.unlabeled
-    label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-    col.name1 <- names(data.unlabeled)[1]
-    if (substring(col.name1, 1, 1) == 'X') {
-        row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-    }
-    # filter data
-    use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-    data.filter <- data.unlabeled[,use.cols]
-    label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-    
-    OUT <- list()
-    OUT$mat_exp <- data.filter
-    OUT$label <- label.filter
-    return(OUT)
-    
-}
-
 # evaluation
-simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
+simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
     # uniform tags
-    for (j in 1:dim(df.cell.names)[1]) {
-        scRef.tag[scRef.tag == df.cell.names[j, 'ref.name']] <- 
-            df.cell.names[j, 'sc.name']
+    for (j in 1:dim(df.ref.names)[1]) {
+        scRef.tag[scRef.tag == df.ref.names[j, 'ref.name']] <- df.ref.names[j, 'name']
     }
-    scRef.tag[!(scRef.tag %in% df.cell.names$sc.name)] <- 'Unassigned'
+    scRef.tag[!(scRef.tag %in% df.ref.names$name)] <- 'Unassigned'
+    for (j in 1:dim(df.sc.names)[1]) {
+        true.tag[true.tag == df.sc.names[j, 'sc.name']] <- df.sc.names[j, 'name']
+    }
     
-    true.tag[true.tag %in% unknow.cell] <- 'Unassigned'
+    percent.unassigned <- sum(scRef.tag == 'Unassigned')/sum(true.tag == 'Unassigned')
+    
+    
+    # true.labels <- setdiff(unique(true.tag), 'Unassigned')
     true.labels <- unique(true.tag)
     our.tag <- scRef.tag
     weighted_macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'weighted', labels = true.labels)
     macro_f1 <- metrics$f1_score(true.tag, our.tag, average = 'macro', labels = true.labels)
     accuracy <- metrics$accuracy_score(true.tag, our.tag)
+    balanced_acc <- metrics$balanced_accuracy_score(true.tag, our.tag)
     # rm unassigned in tags
     true.tag.rm <- true.tag[our.tag != 'Unassigned']
     our.tag.rm <- our.tag[our.tag != 'Unassigned']
     accuracy.rm.unassigned <- metrics$accuracy_score(true.tag.rm, our.tag.rm)
+    macro_f1.rm.unassigned <- metrics$f1_score(true.tag.rm, our.tag.rm, average = 'macro', labels = unique(true.tag.rm))
+    balanced.accuracy.rm.unassigned <- 
+        metrics$balanced_accuracy_score(true.tag.rm, our.tag.rm)
     
     f1 <- c()
-    precision <- c()
     for (label in true.labels) {
         tmp.true.tag <- true.tag
         tmp.our.tag <- our.tag
@@ -63,21 +43,34 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
         tmp.our.tag[tmp.our.tag != label] <- '0'
         sub.f1 <- metrics$f1_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
         f1 <- c(f1, sub.f1)
-        sub.precision <- metrics$precision_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
-        precision <- c(precision, sub.precision)
     }
     names(f1) <- true.labels
-    names(precision) <- true.labels
-    names.rm.unassigned <- setdiff(true.labels, 'Unassigned')
-    mean.precision <- mean(precision[names.rm.unassigned])
+    
+    our.labels <- setdiff(unique(our.tag), 'Unassigned')
+    precision <- c()
+    for (label in our.labels) {
+        tmp.true.tag <- true.tag.rm
+        tmp.our.tag <- our.tag.rm
+        tmp.true.tag[tmp.true.tag != label] <- '0'
+        tmp.our.tag[tmp.our.tag != label] <- '0'
+        sub.precision <- metrics$precision_score(tmp.true.tag, tmp.our.tag, average = 'binary', pos_label = label)
+        precision <- c(precision, sub.precision)
+        
+    }
+    names(precision) <- our.labels
+    mean.precision <- mean(precision)
     
     out <- list()
+    out$percent.unassigned <- percent.unassigned
     out$weighted_macro_f1 <- weighted_macro_f1
     out$macro_f1 <- macro_f1
     out$accuracy <- accuracy
+    out$balanced.accuracy <- balanced_acc
     out$f1 <- f1
-    out$precision.rm.unassigned <- precision
     out$accuracy.rm.unassigned <- accuracy.rm.unassigned
+    out$macro_f1.rm.unassigned <- macro_f1.rm.unassigned
+    out$precision.rm.unassigned <- precision
+    out$balanced.accuracy.rm.unassigned <- balanced.accuracy.rm.unassigned
     out$mean.precision.rm.unassigned <- mean.precision
     out$conf <- table(true.tag, our.tag)
     
@@ -87,55 +80,58 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
 
 source('/home/zy/my_git/scRef/main/scRef.v20.R')
 
+path.output <- '/home/zy/scRef/Benchmark/cross_species/'
+
 ############# regard sc-counts data as reference
-path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
-dataset <- 'Tasic'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_merged.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('Unclassified'))
-# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Tasic <- OUT$mat_exp
-label_Tasic <- OUT$label
-ref.labels <-label_Tasic[, 1]
-ref.mtx <- exp_Tasic
-ref.dataset <- 'Tasic'
+ref.dataset <- 'MCA'
+file.save <- paste0(path.output, ref.dataset, '1.Rdata')
+# file.mtx <- '/home/disk/scRef/MouseAtlas_SingleCell_Han2018/MCA_by_tissue/PeripheralBlood/Count_all_batch.txt'
+# df.mtx <- read.delim(file.mtx, stringsAsFactors = F, row.names = 1)
+# file.cellid <- '/home/disk/scRef/MouseAtlas_SingleCell_Han2018/MCA_by_tissue/PeripheralBlood/CellAssignments_all_batch.txt'
+# df.cellid <- read.delim(file.cellid, stringsAsFactors = F, row.names = 1)
+# df.labels <- df.cellid[colnames(df.mtx),]
+# OUT <- list()
+# OUT$mat_exp <- df.mtx
+# OUT$label <- data.frame(annotations = df.labels$CellType, row.names = colnames(OUT$mat_exp))
+# saveRDS(OUT, file = file.save)
+OUT <- readRDS(file.save)
+ref.labels <- OUT$label[,1]
+ref.mtx <- OUT$mat_exp
 
 ############### import unlabeled data
-############### Habib
-path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
-dataset <- 'Campbell'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Habib <- OUT$mat_exp
-label_Habib <- OUT$label
-exp_sc_mat <- exp_Habib
-label_sc <- label_Habib
+############### HCA PB
+dataset <- 'pbmcsca_10Xv2'
+library(SeuratData)
+data("pbmcsca")
+exp_sc_mat <- as.matrix(pbmcsca@assays$RNA@counts[, pbmcsca$Method == '10x Chromium (v2)'])
+label_sc <- as.character(pbmcsca$CellType)[pbmcsca$Method == '10x Chromium (v2)']
 
-ref.names <- unique(ref.labels)
+ref.names <- names(table(ref.labels))
 # list of cell names
-all.cell <- unique(label_sc[,1])
-sc.name <- c("Neurons", "EndothelialCells",
-             "Astrocyte", "microglia", "Oligodend", "OPC")
-unknow.cell <- setdiff(all.cell, sc.name)
-df.cell.names <- data.frame(ref.name = ref.names, sc.name = sc.name, idx = 1:length(sc.name))
+all.cell <- names(table(label_sc))
+uniform.names <- c("B cell", "Basophil", "Dendritic cell", "Erythroid cell",
+                   "Monocyte", "Neutrophil", "NK cell", "T cell")
+df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
+uniform.names <- c("B cell", "Monocyte", "Monocyte", 
+                   'T cell', 'T cell', "Dendritic cell", 
+                   "Unassigned", "NK cell", "Dendritic cell")
+df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 # run methods
 #############################################
 ### scRef
 source('/home/zy/my_git/scRef/main/scRef.v20.R')
-setwd('~/my_git/scRef')
+exp_sc_mat <- transform.HomoloGene(exp_sc_mat)
+# median(colSums(exp_sc_mat!=0))
+setwd('/home/zy/my_git/scRef')
 result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = T, cluster.cell = 5,
-                      min_cell = 10, CPU = 8)
+                      cluster.speed = F, cluster.resolution = 1,
+                      GMM.num_cluster = NULL, GMM.floor_cutoff = 3, GMM.ceiling_cutoff = 20,
+                      min_cell = 1, CPU = 8)
 pred.scMAGIC <- result.scref$final.out$scRef.tag
 saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
+# table(label_sc, pred.scMAGIC)
 
 ### sciBet
 suppressMessages(library(tidyverse))
@@ -245,7 +241,7 @@ library(scID)
 library(Seurat)
 Train_Labels <- list(ref.labels)
 names(Train_Labels[[1]]) <- colnames(ref.mtx)
-scID_output <- scid_multiclass(exp_sc_mat, ref.mtx, Train_Labels[[1]])
+scID_output <- scid_multiclass(as.data.frame(exp_sc_mat), as.data.frame(ref.mtx), Train_Labels[[1]])
 pred.scID <- scID_output$labels
 saveRDS(pred.scID, 
         file = paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata'))
@@ -273,12 +269,12 @@ saveRDS(pred.scClassify,
 
 # evaluation
 #############################################
-true.tags <- label_sc$label.unlabeled.use.cols...
+true.tags <- label_sc
 df.plot <- data.frame(stringsAsFactors = F)
 
 rda.scMAGIC <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
 pred.scMAGIC <- readRDS(rda.scMAGIC)
-res.scMAGIC <- simple.evaluation(true.tags, pred.scMAGIC, df.cell.names)
+res.scMAGIC <- simple.evaluation(true.tags, pred.scMAGIC, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scMAGIC',
                      value = res.scMAGIC$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -288,16 +284,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scMAGIC',
                            value = res.scMAGIC$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scMAGIC',
+                data.frame(term = 'Balanced accuracy', method = 'scMAGIC',
+                           value = res.scMAGIC$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scMAGIC',
                            value = res.scMAGIC$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scMAGIC',
-                           value = res.scMAGIC$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scMAGIC',
+                           value = res.scMAGIC$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scMAGIC',
+                           value = res.scMAGIC$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.sciBet <- paste0(path.output, ref.dataset, '_', dataset, '_sciBet.Rdata')
 pred.sciBet <- readRDS(rda.sciBet)
-res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.cell.names)
+res.sciBet <- simple.evaluation(true.tags, pred.sciBet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'sciBet',
                      value = res.sciBet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -307,16 +309,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'sciBet',
                            value = res.sciBet$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'sciBet',
+                data.frame(term = 'Balanced accuracy', method = 'sciBet',
+                           value = res.sciBet$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'sciBet',
                            value = res.sciBet$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'sciBet',
-                           value = res.sciBet$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'sciBet',
+                           value = res.sciBet$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'sciBet',
+                           value = res.sciBet$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.singleCellNet <- paste0(path.output, ref.dataset, '_', dataset, '_singleCellNet.Rdata')
 pred.singleCellNet <- readRDS(rda.singleCellNet)
-res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.cell.names)
+res.singleCellNet <- simple.evaluation(true.tags, pred.singleCellNet, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleCellNet',
                      value = res.singleCellNet$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -326,16 +334,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'singleCellNet',
                            value = res.singleCellNet$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'singleCellNet',
+                data.frame(term = 'Balanced accuracy', method = 'singleCellNet',
+                           value = res.singleCellNet$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'singleCellNet',
                            value = res.singleCellNet$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'singleCellNet',
-                           value = res.singleCellNet$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'singleCellNet',
+                           value = res.singleCellNet$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'singleCellNet',
+                           value = res.singleCellNet$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.singleR <- paste0(path.output, ref.dataset, '_', dataset, '_singleR.Rdata')
 pred.singleR <- readRDS(rda.singleR)
-res.singleR <- simple.evaluation(true.tags, pred.singleR, df.cell.names)
+res.singleR <- simple.evaluation(true.tags, pred.singleR, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'singleR',
                      value = res.singleR$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -345,16 +359,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'singleR',
                            value = res.singleR$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'singleR',
+                data.frame(term = 'Balanced accuracy', method = 'singleR',
+                           value = res.singleR$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'singleR',
                            value = res.singleR$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'singleR',
-                           value = res.singleR$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'singleR',
+                           value = res.singleR$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'singleR',
+                           value = res.singleR$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cluster <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cluster.Rdata')
 pred.scmap.cluster <- readRDS(rda.scmap.cluster)
-res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.cell.names)
+res.scmap.cluster <- simple.evaluation(true.tags, pred.scmap.cluster, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cluster',
                      value = res.scmap.cluster$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -364,16 +384,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scmap-cluster',
                            value = res.scmap.cluster$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scmap-cluster',
+                data.frame(term = 'Balanced accuracy', method = 'scmap-cluster',
+                           value = res.scmap.cluster$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scmap-cluster',
                            value = res.scmap.cluster$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scmap-cluster',
-                           value = res.scmap.cluster$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scmap-cluster',
+                           value = res.scmap.cluster$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scmap-cluster',
+                           value = res.scmap.cluster$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scmap.cell <- paste0(path.output, ref.dataset, '_', dataset, '_scmap-cell.Rdata')
 pred.scmap.cell <- readRDS(rda.scmap.cell)
-res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.cell.names)
+res.scmap.cell <- simple.evaluation(true.tags, pred.scmap.cell, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scmap-cell',
                      value = res.scmap.cell$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -383,16 +409,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scmap-cell',
                            value = res.scmap.cell$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scmap-cell',
+                data.frame(term = 'Balanced accuracy', method = 'scmap-cell',
+                           value = res.scmap.cell$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scmap-cell',
                            value = res.scmap.cell$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scmap-cell',
-                           value = res.scmap.cell$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scmap-cell',
+                           value = res.scmap.cell$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scmap-cell',
+                           value = res.scmap.cell$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.CHETAH <- paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata')
 pred.CHETAH <- readRDS(rda.CHETAH)
-res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.cell.names)
+res.CHETAH <- simple.evaluation(true.tags, pred.CHETAH, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'CHETAH',
                      value = res.CHETAH$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -402,16 +434,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'CHETAH',
                            value = res.CHETAH$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'CHETAH',
+                data.frame(term = 'Balanced accuracy', method = 'CHETAH',
+                           value = res.CHETAH$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'CHETAH',
                            value = res.CHETAH$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'CHETAH',
-                           value = res.CHETAH$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'CHETAH',
+                           value = res.CHETAH$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'CHETAH',
+                           value = res.CHETAH$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scPred <- paste0(path.output, ref.dataset, '_', dataset, '_scPred.Rdata')
 pred.scPred <- readRDS(rda.scPred)
-res.scPred <- simple.evaluation(true.tags, pred.scPred, df.cell.names)
+res.scPred <- simple.evaluation(true.tags, pred.scPred, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scPred',
                      value = res.scPred$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -421,16 +459,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scPred',
                            value = res.scPred$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scPred',
+                data.frame(term = 'Balanced accuracy', method = 'scPred',
+                           value = res.scPred$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scPred',
                            value = res.scPred$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scPred',
-                           value = res.scPred$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scPred',
+                           value = res.scPred$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scPred',
+                           value = res.scPred$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scID <- paste0(path.output, ref.dataset, '_', dataset, '_scID.Rdata')
 pred.scID <- readRDS(rda.scID)
-res.scID <- simple.evaluation(true.tags, pred.scID, df.cell.names)
+res.scID <- simple.evaluation(true.tags, pred.scID, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scID',
                      value = res.scID$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -440,16 +484,22 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scID',
                            value = res.scID$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scID',
+                data.frame(term = 'Balanced accuracy', method = 'scID',
+                           value = res.scID$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scID',
                            value = res.scID$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scID',
-                           value = res.scID$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scID',
+                           value = res.scID$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scID',
+                           value = res.scID$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 rda.scClassify <- paste0(path.output, ref.dataset, '_', dataset, '_scClassify.Rdata')
 pred.scClassify <- readRDS(rda.scClassify)
-res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.cell.names)
+res.scClassify <- simple.evaluation(true.tags, pred.scClassify, df.ref.names, df.sc.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scClassify',
                      value = res.scClassify$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub, 
@@ -459,36 +509,25 @@ df.sub <- rbind(df.sub,
                 data.frame(term = 'Accuracy', method = 'scClassify',
                            value = res.scClassify$accuracy, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Accuracy (remove unassigned)', method = 'scClassify',
+                data.frame(term = 'Balanced accuracy', method = 'scClassify',
+                           value = res.scClassify$balanced.accuracy, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'labeled-Accuracy', method = 'scClassify',
                            value = res.scClassify$accuracy.rm.unassigned, stringsAsFactors = F))
 df.sub <- rbind(df.sub, 
-                data.frame(term = 'Mean precision (remove unassigned)', method = 'scClassify',
-                           value = res.scClassify$mean.precision.rm.unassigned, stringsAsFactors = F))
+                data.frame(term = 'labeled-Balanced accuracy', method = 'scClassify',
+                           value = res.scClassify$balanced.accuracy.rm.unassigned, stringsAsFactors = F))
+df.sub <- rbind(df.sub, 
+                data.frame(term = 'Percent of unassigned', method = 'scClassify',
+                           value = res.scClassify$percent.unassigned, stringsAsFactors = F))
 df.plot <- rbind(df.plot, df.sub)
 
 # sort
 df.acc <- df.plot[df.plot$term == 'Accuracy', ]
 df.plot$method <- factor(df.plot$method, 
-                            levels = df.acc$method[order(df.acc$value, decreasing = T)])
+                         levels = df.acc$method[order(df.acc$value, decreasing = T)])
 
 # save results
 file.res <- paste0(path.output, 'results_', ref.dataset, '_', dataset, '.txt')
 write.table(df.plot, file = file.res, sep = '\t')
-
-
-library(ggplot2)
-plot.bar <- ggplot(df.plot,
-       aes(x = method, y = value, fill = term)) +
-    geom_bar(position = 'dodge', stat = 'identity') +
-    theme_bw() +
-    # facet_wrap(~ Evaluator, scales = 'free_x', ncol = 2) +
-    labs(title = "", y = 'Score', x = 'Method', fill = 'Metrics methods') + 
-    theme(axis.text = element_text(size = 9),
-          panel.grid = element_blank(),
-          panel.grid.major.y = element_line(color = 'grey', size = 0.2),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          axis.title = element_text(size = 12))
-ggsave(filename = paste0(ref.dataset, '_', dataset, '.png'), 
-       path = path.output, plot = plot.bar,
-       units = 'cm', height = 12, width = 24)
 

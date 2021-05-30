@@ -5,7 +5,7 @@ use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 py_module_available('sklearn')
 metrics <- import('sklearn.metrics')
 
-source('/home/zy/my_git/scRef/main/scRef.v19.R')
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
 
 ############# regard sc-counts data as reference
 path.input <- '/home/zy/scRef/summary/'
@@ -40,12 +40,13 @@ res.scRef <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
                       type_ref = 'sc-counts', use.RUVseq = T, 
                       cluster.speed = T, cluster.cell = 5,
                       min_cell = 10, CPU = 8)
-path.res <- '/home/zy/scRef/figure/mouse_brain'
+path.res <- '/home/zy/scRef/figure/mouse_brain/'
+
+res.scRef <- annotate.UnassignedCell(res.scRef, exp_sc_mat, atlas = 'MCA', CPU = 4)
+
 file.res <- paste0(path.res, 'list_result_', ref.dataset, '_', dataset, '_scRef.Rdata')
 saveRDS(res.scRef, file = file.res)
 res.scRef <- readRDS(file.res)
-
-res.scRef <- annotate.UnassignedCell(res.scRef, exp_sc_mat, atlas = 'MCA', CPU = 10)
 
 ### original plot
 library(Seurat)
@@ -84,53 +85,81 @@ seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 100, verbose = F)
 seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:100, n.neighbors = 50)
 
 library(ggplot2)
+library(ggpubr)
+library(scales)
 # figure1: ture label
 plot.umap <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'original.label') + 
-    xlim(-16, 14) +
+    DimPlot(seurat.unlabeled, reduction = "umap", 
+            label = T, repel = T, label.size = 2.5,
+            group.by = 'original.label') + 
+    scale_color_manual(values = c('#24B700', '#E18A00', '#BE9C00', '#00BE70', '#24B700', '#8CAB00', 
+                                  '#00C1AB', '#00BBDA', '#00ACFC', '#8B93FF', '#D575FE'),
+                       breaks = c('Astrocytes', 'Endothelial cells', 'Ependymocytes', 'Mural cells', 
+                                  'Neurons', 'Oligodendrocytes', 'OPC', 'Pars tuberalis',
+                                  'PVMs & Microglia', 'Tanycytes', 'VLMCs')) + 
     theme_bw() + 
-    theme(axis.text = element_text(size = 9),
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
           panel.grid = element_blank(),
-          axis.title = element_text(size = 12),
-          legend.text = element_text(size = 11))
+          axis.title = element_text(size = 8, face = 'bold'),
+          legend.text = element_text(size = 6),
+          legend.position = 'bottom') + 
+    guides(color = guide_legend(ncol = 3,  byrow = TRUE, reverse = F,
+                                override.aes = list(size=3),
+                                keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
 ggsave(filename = paste0('cluster_', ref.dataset, '_', dataset, '.png'), 
        path = path.res, plot = plot.umap,
-       units = 'cm', height = 18, width = 24)
+       units = 'cm', height = 10.5, width = 8.5)
 
 # figure2: cluster label
 # DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
 # figure3: scRef plus label
 plot.umap.scRef <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'scRef.tag') + 
-    scale_color_manual(values = c('#F8766D', '#D39200', '#00BA38', '#00B9E3', '#619CFF', '#DB72FB', 'gray'),
+    DimPlot(seurat.unlabeled, reduction = "umap", 
+            label = T, repel = T, label.size = 2.5,
+            group.by = 'scRef.tag') + 
+    scale_color_manual(values = c('#24B700', '#E18A00', '#00ACFC', '#24B700', '#8CAB00', '#00C1AB', 'gray'),
                        breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron', 
                                   'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 'Unassigned')) + 
     theme_bw() + 
-    theme(axis.text = element_text(size = 9),
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
           panel.grid = element_blank(),
-          axis.title = element_text(size = 12),
-          legend.text = element_text(size = 11))
+          axis.title = element_text(size = 8, face = 'bold'),
+          legend.text = element_text(size = 6),
+          legend.position = 'bottom') + 
+    guides(color = guide_legend(ncol = 3,  byrow = TRUE, reverse = F,
+                                override.aes = list(size=3),
+                                keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
 ggsave(filename = paste0('cluster_scRef_', ref.dataset, '_', dataset, '.png'), 
        path = path.res, plot = plot.umap.scRef,
-       units = 'cm', height = 18, width = 26)
+       units = 'cm', height = 10, width = 8.5)
 
 # figure3: scRef and annotate unassigned
 plot.umap.scRef.unassign <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", label = T, repel = T, group.by = 'new.tag') + 
-    scale_color_manual(values = c('#F8766D', '#D39200', '#00BA38', '#00B9E3', '#619CFF', '#DB72FB', 
-                                  '#93AA00', '#00C19F', '#A52A2A', 'gray'),
+    DimPlot(seurat.unlabeled, reduction = "umap", 
+            label = T, repel = T, label.size = 2.5,
+            group.by = 'new.tag') + 
+    scale_color_manual(values = c('#24B700', '#E18A00', '#00ACFC', '#24B700', '#8CAB00', '#00C1AB', 
+                                  '#BE9C00', '#800080', '#A52A2A', 'gray'),
                        breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron', 
                                   'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 
                                   'Hypothalamic ependymal cell', 'Oligodendrocyte precursor cell',
                                   'Astroglial cell', 'Unassigned')) + 
-    xlim(-18, 15) +
+    # xlim(-18, 15) +
     theme_bw() + 
-    theme(axis.text = element_text(size = 9),
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
           panel.grid = element_blank(),
-          axis.title = element_text(size = 12),
-          legend.text = element_text(size = 11))
+          axis.title = element_text(size = 8, face = 'bold'),
+          legend.text = element_text(size = 6),
+          legend.position = 'bottom') + 
+    guides(color = guide_legend(ncol = 2,  byrow = TRUE, reverse = F,
+                                override.aes = list(size=3),
+                                keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
 ggsave(filename = paste0('cluster_scRef_unassign_', ref.dataset, '_', dataset, '.png'), 
        path = path.res, plot = plot.umap.scRef.unassign,
-       units = 'cm', height = 18, width = 26)
+       units = 'cm', height = 11, width = 8.5)
 
-
+# ggarrange(plot.umap, plot.umap.scRef, plot.umap.scRef.unassign, 
+#           ncol=2, nrow=2, common.legend = TRUE, legend="bottom") 

@@ -72,14 +72,15 @@ evaluate <- function(TrueLabelsPath, PredLabelsPath){
   num_unlab <- sum(!(pred_lab %in% unique_true))
   per_unlab <- num_unlab / total
   
-  true_lab <- true_lab[(pred_lab %in% unique_true)]
-  pred_lab <- pred_lab[(pred_lab %in% unique_true)]
+  pred_lab[!(pred_lab %in% unique_true)] <- 'Unassigned'
   
   weighted.macro.F1 <- metrics$f1_score(true_lab, pred_lab, average = 'weighted')
   # metrics$f1_score(true_lab, pred_lab, average = 'macro')
-  # metrics$accuracy_score(true_lab, pred_lab)
+  acc <- metrics$accuracy_score(true_lab, pred_lab)
+  balanced_acc <- metrics$balanced_accuracy_score(true_lab, pred_lab)
   
   result <- list(Conf = conf, MedF1 = med_F1, F1 = F1, Mean_F1 = mean_F1, Acc = acc, 
+                 balanced_acc = balanced_acc,
                  WMean_F1 = weighted.macro.F1,
                  PercUnl = per_unlab, PopSize = pop_size)
   

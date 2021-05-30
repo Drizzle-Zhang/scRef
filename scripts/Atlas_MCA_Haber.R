@@ -1,51 +1,26 @@
+# target data
+path.input <- '/home/disk/scRef/MouseReference_v1/MouseSmallIntestinalEpithelium_SingleCell_Haber2018'
+path.output <- '/home/zy/scRef/atlas_anno/'
+dataset <- 'Haber_Duodenum'
+file.data.unlabeled <- paste0(path.input, '/raw_count/cell_exp.txt')
+file.label.unlabeled <- paste0(path.input, '/raw_count/cell_meta.txt')
+data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
+label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
+label.unlabeled$location <- unlist(lapply(strsplit(row.names(label.unlabeled), '_'), 
+                                  function(x) {x[2]}))
+label.unlabeled$location[!(label.unlabeled$location %in% 
+                              c('Ileum', 'Duodenum', 'Jejunum'))] <- 'Other'
+label.Duodenum <- label.unlabeled[label.unlabeled$location == 'Duodenum',]
+mat.Duodenum <- data.unlabeled[, rownames(label.Duodenum)]
+mat.Duodenum <- mat.Duodenum[!(is.na(mat.Duodenum[,1])),]
+exp_sc_mat <- mat.Duodenum
+label_sc <- label.Duodenum
 
-# function of data preparation
-prepare.data <- function(file.data.unlabeled, file.label.unlabeled, 
-                         del.label = c('miss')) {
-    library(stringr)
-    data.unlabeled <- read.delim(file.data.unlabeled, row.names=1)
-    data.unlabeled <- floor(data.unlabeled)
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '_', '.')
-    names(data.unlabeled) <- str_replace_all(names(data.unlabeled), '-', '.')
-    # read label file
-    file.label.unlabeled <- file.label.unlabeled
-    label.unlabeled <- read.delim(file.label.unlabeled, row.names=1)
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '_', '.')
-    row.names(label.unlabeled) <- str_replace_all(row.names(label.unlabeled), '-', '.')
-    col.name1 <- names(data.unlabeled)[1]
-    if (substring(col.name1, 1, 1) == 'X') {
-        row.names(label.unlabeled) <- paste0('X', row.names(label.unlabeled))
-    }
-    # filter data
-    use.cols <- row.names(label.unlabeled)[!label.unlabeled[,1] %in% del.label]
-    data.filter <- data.unlabeled[,use.cols]
-    label.filter <- data.frame(label.unlabeled[use.cols,], row.names = use.cols)
-    
-    OUT <- list()
-    OUT$data.filter <- data.filter
-    OUT$label.filter <- label.filter
-    return(OUT)
-    
-}
-
-path.input <- '/home/zy/scRef/sc_data/'
-path.output <- '/home/zy/scRef/atlas_anno'
-dataset <- 'Campbell'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_original.txt')
-# OUT <- prepare.data(file.data.unlabeled, file.label.unlabeled, del.label = c('miss'))
-# saveRDS(OUT, file = paste0(path.output, dataset, '.Rdata'))
-OUT <- readRDS(paste0('/home/zy/scRef/Benchmark/mouse_brain/', dataset, '.Rdata'))
-exp_Habib <- OUT$mat_exp
-label_Habib <- OUT$label
-exp_sc_mat <- exp_Habib
-label_sc <- label_Habib
-
-source('/home/zy/my_git/scRef/main/scRef.v21.R')
-setwd('~/my_git/scRef')
-# df.atlas <- .imoprt_outgroup('MCA', normalization = F)
-# df.atlas <- df.atlas[, colnames(df.atlas) != 'Pan gabaergic']
+source('/home/zy/my_git/scRef/main/scRef.v20.R')
+setwd('/home/zy/my_git/scRef')
 library(Seurat)
+# df.atlas <- .imoprt_outgroup('MCA', normalization = F)
+# df.atlas <- df.atlas[, colnames(df.atlas) != 'CD4']
 df.out.group <- 
     read.table('/home/disk/scRef/MouseAtlas_SingleCell_Han2018/combinedMCA/MCA_concat_outer.txt', 
                header = T, row.names = 1, sep = '\t', check.names = F)
@@ -57,14 +32,21 @@ seurat.out.group <-
     NormalizeData(seurat.out.group, normalization.method = "LogNormalize", 
                   scale.factor = 1e6, verbose = F)
 df.atlas <- as.data.frame(seurat.out.group@assays$RNA@counts)
+df.atlas <- df.atlas[, !(colnames(df.atlas) %in%
+                             c('Epithelial cell_Kcne3 high(Small-Intestine)',
+                               'Epithelial cell_Sh2d6 high(Small-Intestine)',
+                               'Macrophage_G0s2 high(Small-Intestine)'))]
 
 
 result.scref <- SCREF(exp_sc_mat, df.atlas,
-                      type_ref = 'sum-counts', use.RUVseq = F, 
-                      cluster.speed = T, CPU = 4)
+                      type_ref = 'sum-counts', use.RUVseq = F, out.group = 'MCA',
+                      # method1 = 'spearman',
+                      GMM.floor_cutoff = 5, GMM.ceiling_cutoff = 30,
+                      cluster.speed = F, CPU = 4,
+                      cluster.cell = 3, min_cell = 3)
 pred.scRef <- result.scref$final.out$scRef.tag
 
-true.tags <- label_sc$CellType
+true.tags <- label_sc$Cluster
 table(true.tags, pred.scRef)
 # df.tags <- result.scref$combine.out
 # df.view <- merge(label_sc, df.tags, by = 'row.names')
@@ -74,9 +56,9 @@ library(ggplot2)
 path.res <- '/home/zy/scRef/figure/atlas_anno/'
 method <- 'scMAGIC'
 file.pred <- paste0(path.res, 'MCA_', dataset, '_scMAGIC.Rdata')
-saveRDS(pred.scRef, file.pred)
+# saveRDS(pred.scRef, file.pred)
 pred.scRef <- readRDS(file.pred)
-true.tags <- label_sc$CellType
+true.tags <- label_sc$Cluster
 table(true.tags, pred.scRef)
 
 # simplify colnames of atlas
@@ -89,6 +71,7 @@ for (col in colnames(df.atlas)) {
                                              col.simple = col.simple))
 }
 row.names(df.simple) <- df.simple$col
+
 
 # heatmap
 mytable <- table(true.tags, pred.scRef)
@@ -111,31 +94,29 @@ for (label1 in rownames(mytable.sum)) {
     }
 }
 
-ref.cells <- setdiff(colnames(mytable.sum), 
-                     c("Neuron", "Astroglial cell"))
+ref.cells <- setdiff(colnames(mytable.sum), c("Epithelium of small intestinal villi_S100g high"))
 set.seed(1234)
 all.cells <- sort(unique(c(sample(setdiff(unique(df.simple$col.simple), ref.cells), 100), 
                            ref.cells, "Unassigned")))
-pos <- c(-1, 2, -1, 2, -1, 0, 0, 0, 0, -3, 0)
+pos <- c(0, 0, 0, -1, 2, -2, 1)
 pos.cells <- c()
 for (idx in 1:length(ref.cells)) {
     pos.idx <- pos[idx]
     pos.cells <- c(pos.cells, all.cells[which(all.cells==ref.cells[idx])+pos.idx])
 }
-mydata <- mydata[mydata$annotation %in% all.cells,]
+ref.cells <- gsub('Epithelium of small intestinal villi_mt-Nd1 high',
+                  'Epithelium of small intestinal villi',
+                  ref.cells)
 mydata$annotation <- factor(mydata$annotation, levels = all.cells)
 mydata$origin <- factor(mydata$origin, 
-                        levels = c("Astrocytes", 
-                                   "Endothelial cells", "Mural cells",
-                                   "Ependymocytes", "PVMs & Microglia", 
-                                   "OPC", "Neurons", 
-                                   "Oligodendrocytes", "Pars tuberalis",
-                                   "Tanycytes", "VLMCs"))
+                        levels = c("Goblet", "Enterocyte", 
+                                   "Paneth", "Enteroendocrine", 
+                                   "Tuft", 
+                                   "EP", "Stem", "TA"))
 
 plot.heatmap <- 
     ggplot(data = mydata, aes(x = origin, y = annotation)) + 
     geom_tile(aes(fill = prop)) + 
-    # scale_fill_gradient2(low = "#C0C0C0", high = "#FFFF00", mid = "#32CD32", midpoint = 0.5) + 
     scale_fill_gradient2(low = "#FFF5EE", mid = '#EE7700', high = "#B22222", midpoint = 0.5) + 
     labs(fill = 'Proportion') + 
     theme_bw() +
@@ -156,8 +137,7 @@ plot.heatmap <-
     scale_y_discrete(breaks = pos.cells, labels = ref.cells)
 ggsave(filename = paste0('heatmap_MCA_', dataset, '_', method, '.png'), 
        path = path.res, plot = plot.heatmap,
-       units = 'cm', height = 10, width = 10)
-
+       units = 'cm', height = 10, width = 9)
 
 # accessment
 # import python package: sklearn.metrics
@@ -172,14 +152,12 @@ mytable <- table(true.tags, pred.scRef)
 ref.names <- colnames(mytable)
 all.cell <- names(table(true.tags))
 uniform.names <- 
-    c('Astrocytes', 'Astrocytes', 'Astroglial cell', 'Endothelial cells',
-      'Endothelial cells', 'Neurons', 'Ependymocytes', 'PVMs & Microglia',
-      'Neurons', 'OPC', 'Neurons', 'Unassigned', 'Endothelial cells')
+    c('Goblet', 'Enterocyte', 'Enterocyte', 'Paneth',
+      'Enteroendocrine', 'Enteroendocrine', 'Tuft', 'Unassigned')
 df.ref.names <- data.frame(ref.name = ref.names, name = uniform.names)
 uniform.names <- 
-    c("Astrocytes", "Endothelial cells", "Ependymocytes", "Unassigned",
-      "Neurons", "Oligodendrocytes", "OPC", "Unassigned", "PVMs & Microglia",
-      "Unassigned", "Unassigned")
+    c("Enterocyte", "Enteroendocrine", "Unassigned", "Goblet",
+      "Paneth", "Unassigned", "Unassigned", "Tuft")
 df.sc.names <- data.frame(sc.name = all.cell, name = uniform.names)
 
 simple.evaluation <- function(true.tag, scRef.tag, df.ref.names, df.sc.names) {
@@ -258,13 +236,12 @@ res.scMAGIC <- simple.evaluation(true.tags, pred.scRef, df.ref.names, df.sc.name
 file.res.scMAGIC <- paste0(path.res, 'RES_MCA_', dataset, '_scMAGIC.txt')
 # write.table(res.scMAGIC, file.res.scMAGIC)
 saveRDS(res.scMAGIC, file.res.scMAGIC)
-readRDS(file.res.scMAGIC)
 
 # $accuracy
-# [1] 0.9464175
+# [1] 0.9490446
 # 
 # $balanced.accuracy
-# [1] 0.8587342
-
+# [1] 0.8029865
+# 
 # $accuracy.rm.unassigned
-# [1] 0.9697406
+# [1] 0.9269747
