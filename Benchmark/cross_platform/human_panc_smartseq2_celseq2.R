@@ -1,7 +1,7 @@
 # import python package: sklearn.metrics
 library(Seurat)
 library(reticulate)
-use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
+use_python('/local/zy/tools/anaconda3/bin/python3', required = T)
 # py_config()
 py_module_available('sklearn')
 metrics <- import('sklearn.metrics')
@@ -70,18 +70,17 @@ simple.evaluation <- function(true.tag, scRef.tag, df.cell.names) {
 
 }
 
-source('/local/zy/my_git/scRef/main/scRef.v20.R')
 
 ############# regard sc-counts data as reference
-ref.dataset <- 'celseq2'
-ref.mtx <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('celseq2')])
-ref.labels <- as.character(panc8$celltype)[panc8$dataset %in% c('celseq2')]
+ref.dataset <- 'smartseq2'
+ref.mtx <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('smartseq2')])
+ref.labels <- as.character(panc8$celltype)[panc8$dataset %in% c('smartseq2')]
 median(colSums(ref.mtx != 0))
 
 ############### import unlabeled data
-dataset <- 'smartseq2'
-exp_sc_mat <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('smartseq2')])
-label_sc <- as.character(panc8$celltype)[panc8$dataset %in% c('smartseq2')]
+dataset <- 'celseq2'
+exp_sc_mat <- as.matrix(panc8@assays$RNA@counts[, panc8$dataset %in% c('celseq2')])
+label_sc <- as.character(panc8$celltype)[panc8$dataset %in% c('celseq2')]
 median(colSums(exp_sc_mat != 0))
 
 ref.names <- unique(ref.labels)
@@ -92,32 +91,18 @@ ref.names <- unique(ref.labels)
 # unknow.cell <- c()
 df.cell.names <- data.frame(ref.name = ref.names, sc.name = ref.names, idx = 1:length(ref.names))
 
-path.output <- '/home/zy/scRef/Benchmark/human_panc/'
+path.output <- '/mdshare/node9/zy/scRef/Benchmark/human_panc/'
 
 # run methods
 #############################################
 library(scMAGIC)
 output.scMAGIC <- scMAGIC(exp_sc_mat, ref.mtx, ref.labels,
-                          atlas = 'HCL', opt_speed = F, combine_num_cell = 3,
+                          atlas = 'HCL', opt_speed = F,
                           GMM.floor_cutoff = 3, GMM.ceiling_cutoff = 15,
-                          threshold_recall = 0.2, num_threads = 8,simple_output = F)
-# pred.scMAGIC <- output.scMAGIC$scMAGIC.tag
-table(label_sc, output.scMAGIC$final.out$scMAGIC.tag)
-View(output.scMAGIC$pvalue1)
-
-### scRef
-source('/home/zy/my_git/scRef/main/scRef.v21.R')
-setwd('~/my_git/scRef')
-result.scref <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
-                      type_ref = 'sc-counts', use.RUVseq = T,
-                      out.group = 'HCA',
-                      cluster.speed = T, cluster.cell = 3,
-                      GMM.floor_cutoff = 3, GMM.ceiling_cutoff = 15,
-                      threshold.recall = 0.5,
-                      min_cell = 1, CPU = 8)
-pred.scRef <- result.scref$final.out$scRef.tag
-table(label_sc, pred.scRef)
-saveRDS(pred.scRef, file = paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata'))
+                          num_threads = 8)
+pred.scMAGIC <- output.scMAGIC$scMAGIC.tag
+# table(label_sc, output.scMAGIC$final.out$scMAGIC.tag)
+saveRDS(pred.scMAGIC, file = paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata'))
 
 ### sciBet
 suppressMessages(library(tidyverse))
@@ -133,7 +118,7 @@ saveRDS(sciBet, file = paste0(path.output, ref.dataset, '_', dataset, '_sciBet.R
 ### singleCellNet
 library(singleCellNet)
 library(dplyr)
-out <- .get_overlap_genes(exp_sc_mat, ref.mtx)
+out <- get_overlap_genes(exp_sc_mat, ref.mtx)
 train_set <- as.matrix(out$exp_ref_mat)
 LabelsTrain <- data.frame(Annotation = ref.labels, row.names = colnames(ref.mtx))
 test_set <- as.matrix(out$exp_sc_mat)
@@ -157,7 +142,7 @@ saveRDS(pred.singleR, file = paste0(path.output, ref.dataset, '_', dataset, '_si
 ###  scmap
 library(scmap)
 library(SingleCellExperiment)
-out <- .get_overlap_genes(exp_sc_mat, ref.mtx)
+out <- get_overlap_genes(exp_sc_mat, ref.mtx)
 train_set <- as.matrix(out$exp_ref_mat)
 test_set <- as.matrix(out$exp_sc_mat)
 sce <- SingleCellExperiment(list(normcounts = train_set),
@@ -194,7 +179,9 @@ library(SingleCellExperiment)
 sce <- SingleCellExperiment(assays = list(counts = ref.mtx),
                             colData = data.frame(celltypes = ref.labels))
 sce_test <- SingleCellExperiment(list(counts = exp_sc_mat))
-sce_test <- CHETAHclassifier(input = sce_test, ref_cells = sce)
+Genenum_median <- median(colSums(ref.mtx != 0))
+sce_test <- CHETAHclassifier(input = sce_test, ref_cells = sce,
+                             n_genes = Genenum_median/2)
 pred.CHETAH <- sce_test$celltype_CHETAH
 saveRDS(pred.CHETAH,
         file = paste0(path.output, ref.dataset, '_', dataset, '_CHETAH.Rdata'))
@@ -204,8 +191,8 @@ library("scPred")
 library("Seurat")
 library("magrittr")
 # scPred Training
-reference <- CreateSeuratObject(counts = ref.mtx)
-reference@meta.data$cell_type <- ref.labels
+reference <- CreateSeuratObject(counts = ref.mtx[, !(ref.labels %in% c('schwann'))])
+reference@meta.data$cell_type <- ref.labels[!(ref.labels %in% c('schwann'))]
 reference <- reference %>%
     NormalizeData() %>%
     FindVariableFeatures() %>%
@@ -258,9 +245,9 @@ saveRDS(pred.scClassify,
 true.tags <- label_sc
 df.plot <- data.frame(stringsAsFactors = F)
 
-rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scRef.Rdata')
-pred.scRef <- readRDS(rda.scRef)
-res.scRef <- simple.evaluation(true.tags, pred.scRef, df.cell.names)
+rda.scRef <- paste0(path.output, ref.dataset, '_', dataset, '_scMAGIC.Rdata')
+pred.scMAGIC <- readRDS(rda.scRef)
+res.scRef <- simple.evaluation(true.tags, pred.scMAGIC, df.cell.names)
 df.sub <- data.frame(term = 'Weighted macro F1', method = 'scMAGIC',
                      value = res.scRef$weighted_macro_f1, stringsAsFactors = F)
 df.sub <- rbind(df.sub,
