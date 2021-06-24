@@ -76,6 +76,7 @@ source('/home/zy/my_git/scRef/main/scRef.v20.R')
 ref.dataset <- '10Xv2'
 ref.mtx <- as.matrix(pbmcsca@assays$RNA@counts[, pbmcsca$Method == '10x Chromium (v2)'])
 ref.labels <- as.character(pbmcsca$CellType)[pbmcsca$Method == '10x Chromium (v2)']
+median(colSums(ref.mtx != 0))
 
 ############### import unlabeled data
 dataset <- 'indrop'
