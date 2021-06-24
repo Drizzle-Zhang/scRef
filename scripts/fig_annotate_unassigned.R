@@ -5,25 +5,18 @@ use_python('/home/zy/tools/anaconda3/bin/python3', required = T)
 py_module_available('sklearn')
 metrics <- import('sklearn.metrics')
 
-source('/home/zy/my_git/scRef/main/scRef.v20.R')
 
 ############# regard sc-counts data as reference
-path.input <- '/home/zy/scRef/summary/'
-path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
+path.output <- '/mdshare/node9/zy/scRef/Benchmark/mouse_brain/'
 dataset <- 'Tasic'
-file.data.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat.txt')
-file.label.unlabeled <- paste0(path.input, dataset, '_exp_sc_mat_cluster_merged.txt')
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
-exp_Tasic <- OUT$data.filter
-label_Tasic <- OUT$label.filter
-ref.labels <-label_Tasic[,1]
-ref.mtx <- exp_Tasic
+ref.mtx <- OUT$mat_exp
+ref.labels <- OUT$label[,1]
 ref.dataset <- 'Tasic'
 
 ############### import unlabeled data
 ############### Habib
-path.input <- '/home/zy/scRef/summary/'
-path.output <- '/home/zy/scRef/Benchmark/mouse_brain/'
+path.output <- '/mdshare/node9/zy/scRef/Benchmark/mouse_brain/'
 dataset <- 'Campbell'
 OUT <- readRDS(paste0(path.output, dataset, '.Rdata'))
 exp_Habib <- OUT$mat_exp
@@ -33,26 +26,48 @@ label_sc <- label_Habib
 
 # run methods
 #############################################
-### scRef
-source('/home/zy/my_git/scRef/main/scRef.v20.R')
-setwd('~/my_git/scRef')
-res.scRef <- SCREF(exp_sc_mat, ref.mtx, ref.labels,
-                      type_ref = 'sc-counts', use.RUVseq = T, 
-                      cluster.speed = T, cluster.cell = 5,
-                      min_cell = 10, CPU = 8)
-path.res <- '/home/zy/scRef/figure/mouse_brain/'
+### scMAGIC
+library(scMAGIC)
+output.scMAGIC <- scMAGIC(exp_sc_mat, ref.mtx, ref.labels, num_threads = 10)
+pred.scMAGIC <- output.scMAGIC$scMAGIC.tag
+table(label_sc[,1], pred.scMAGIC)
 
-res.scRef <- annotate.UnassignedCell(res.scRef, exp_sc_mat, atlas = 'MCA', CPU = 4)
+path.res <- '/mdshare/node9/zy/scRef/unassign/'
+file.scMAGIC <- paste0(path.res, 'scMAGIC.Rdata')
+saveRDS(output.scMAGIC, file = file.scMAGIC)
+output.scMAGIC <- readRDS(file.scMAGIC)
 
-file.res <- paste0(path.res, 'list_result_', ref.dataset, '_', dataset, '_scRef.Rdata')
-saveRDS(res.scRef, file = file.res)
-res.scRef <- readRDS(file.res)
+
+cell_id.unassigned <- row.names(output.scMAGIC[output.scMAGIC$scMAGIC.tag == 'Unassigned',])
+exp.unassigned <- exp_sc_mat[, cell_id.unassigned]
+label.unassigned <- label_sc[cell_id.unassigned,]
+data("MCA_ref")
+output.unassigned <- scMAGIC(exp.unassigned, MCA_ref,
+                             type_ref = 'sum-counts', use_RUVseq = F,
+                             corr_use_HVGene1 = 2000, corr_use_HVGene2 = NULL,
+                             num_threads = 8)
+table(label.unassigned, output.unassigned$scMAGIC.tag)
+output.unassigned[output.unassigned$scMAGIC.tag %in% c('Astrocyte_Atp1b2 high(Brain)',
+                                                       'Astroglial cell(Bergman glia)(Brain)',
+                                                       'Smooth muscle cell_Acta2 high(Pancreas)',
+                                                       'Ependymal cell(Fetal_Brain)'),'scMAGIC.tag'] <- 'Unassigned'
+output.unassigned[output.unassigned$scMAGIC.tag %in%
+                      c('Hypothalamic ependymal cell(Brain)'),'scMAGIC.tag'] <-
+    'Hypothalamic ependymal cell'
+output.unassigned[output.unassigned$scMAGIC.tag %in%
+                      c('Atrial cardiomyocyte_Acta2 high(Neonatal-Heart)'),'scMAGIC.tag'] <-
+    'Atrial cardiomyocyte_Acta2 high'
+
+path.res <- '/mdshare/node9/zy/scRef/unassign/'
+file.unassign <- paste0(path.res, 'unassigned.Rdata')
+saveRDS(output.unassigned, file = file.unassign)
+output.unassigned <- readRDS(file.unassign)
 
 ### original plot
 library(Seurat)
 # data preparing
 seurat.unlabeled <- CreateSeuratObject(counts = exp_sc_mat)
-seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize", 
+seurat.unlabeled <- NormalizeData(seurat.unlabeled, normalization.method = "LogNormalize",
                                   scale.factor = 10000)
 seurat.unlabeled <- FindVariableFeatures(seurat.unlabeled, selection.method = "vst", nfeatures = 2000)
 # VariableFeatures(seurat.unlabeled)
@@ -66,100 +81,101 @@ seurat.unlabeled <- ScaleData(seurat.unlabeled)
 use.cells <- dimnames(seurat.unlabeled@assays$RNA@counts)[[2]]
 names(label_sc) <- 'cell_type'
 # label_sc <- cbind(label_sc, seurat.unlabeled@reductions$umap@cell.embeddings)
-seurat.unlabeled@meta.data$original.label <- label_sc[use.cells, 'cell_type']
-pred.scRef <- res.scRef$final.out
+seurat.unlabeled@meta.data$original.label <- label_sc[use.cells, ]
 # pred.scRef <- cbind(pred.scRef, seurat.unlabeled@reductions$umap@cell.embeddings)
-seurat.unlabeled@meta.data$scRef.tag <- pred.scRef$scRef.tag
-pred.unassign <- res.scRef$pred.new[use.cells,]
+seurat.unlabeled@meta.data$scMAGIC.tag <- pred.scMAGIC
+pred.new <- rbind(output.scMAGIC[output.scMAGIC$scMAGIC.tag != 'Unassigned',], output.unassigned)
+pred.unassign <- pred.new[use.cells, 'scMAGIC.tag']
 # pred.unassign <- cbind(pred.unassign, seurat.unlabeled@reductions$umap@cell.embeddings)
-seurat.unlabeled@meta.data$new.tag <- pred.unassign$scRef.tag
+seurat.unlabeled@meta.data$new.tag <- pred.unassign
 
 # PCA
-seurat.unlabeled <- RunPCA(seurat.unlabeled, npcs = 100, verbose = F)
+seurat.unlabeled <- RunPCA(seurat.unlabeled)
 
 # cluster
 # seurat.unlabeled <- FindNeighbors(seurat.unlabeled, reduction = "pca", dims = 1:75, nn.eps = 0.5)
 # seurat.unlabeled <- FindClusters(seurat.unlabeled, resolution = 3, n.start = 20)
 
 # UMAP
-seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:100, n.neighbors = 50)
+seurat.unlabeled <- RunUMAP(seurat.unlabeled, dims = 1:50)
 
 library(ggplot2)
 library(ggpubr)
 library(scales)
+library(RColorBrewer)
 # figure1: ture label
-plot.umap <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", 
+plot.umap <-
+    DimPlot(seurat.unlabeled, reduction = "umap",
             label = T, repel = T, label.size = 2.5,
-            group.by = 'original.label') + 
-    scale_color_manual(values = c('#24B700', '#E18A00', '#BE9C00', '#00BE70', '#24B700', '#8CAB00', 
-                                  '#00C1AB', '#00BBDA', '#00ACFC', '#8B93FF', '#D575FE'),
-                       breaks = c('Astrocytes', 'Endothelial cells', 'Ependymocytes', 'Mural cells', 
+            group.by = 'original.label') +
+    scale_color_manual(values = c('#FB9A99', '#E18A00', '#BE9C00', '#00BE70', '#1F78B4', '#8CAB00',
+                                  '#00C1AB', '#B2DF8A', '#00ACFC', '#33A02C', '#D575FE'),
+                       breaks = c('Astrocytes', 'Endothelial cells', 'Ependymocytes', 'Mural cells',
                                   'Neurons', 'Oligodendrocytes', 'OPC', 'Pars tuberalis',
-                                  'PVMs & Microglia', 'Tanycytes', 'VLMCs')) + 
-    theme_bw() + 
+                                  'PVMs & Microglia', 'Tanycytes', 'VLMCs')) +
+    theme_bw() +
     theme(axis.text = element_blank(),
           axis.ticks = element_blank(),
           panel.grid = element_blank(),
           axis.title = element_text(size = 8, face = 'bold'),
           legend.text = element_text(size = 6),
-          legend.position = 'bottom') + 
+          legend.position = 'bottom') +
     guides(color = guide_legend(ncol = 3,  byrow = TRUE, reverse = F,
                                 override.aes = list(size=3),
                                 keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
-ggsave(filename = paste0('cluster_', ref.dataset, '_', dataset, '.png'), 
+ggsave(filename = paste0('cluster_', ref.dataset, '_', dataset, '.png'),
        path = path.res, plot = plot.umap,
        units = 'cm', height = 10.5, width = 8.5)
 
 # figure2: cluster label
 # DimPlot(seurat.unlabeled, reduction = "umap", label = T, group.by = 'seurat_clusters')
 # figure3: scRef plus label
-plot.umap.scRef <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", 
+plot.umap.scRef <-
+    DimPlot(seurat.unlabeled, reduction = "umap",
             label = T, repel = T, label.size = 2.5,
-            group.by = 'scRef.tag') + 
-    scale_color_manual(values = c('#24B700', '#E18A00', '#00ACFC', '#24B700', '#8CAB00', '#00C1AB', 'gray'),
-                       breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron', 
-                                  'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 'Unassigned')) + 
-    theme_bw() + 
+            group.by = 'scMAGIC.tag') +
+    scale_color_manual(values = c('#FB9A99', '#E18A00', '#00ACFC', '#1F78B4', '#8CAB00', '#00C1AB', 'gray'),
+                       breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron',
+                                  'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 'Unassigned')) +
+    theme_bw() +
     theme(axis.text = element_blank(),
           axis.ticks = element_blank(),
           panel.grid = element_blank(),
           axis.title = element_text(size = 8, face = 'bold'),
           legend.text = element_text(size = 6),
-          legend.position = 'bottom') + 
+          legend.position = 'bottom') +
     guides(color = guide_legend(ncol = 3,  byrow = TRUE, reverse = F,
                                 override.aes = list(size=3),
                                 keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
-ggsave(filename = paste0('cluster_scRef_', ref.dataset, '_', dataset, '.png'), 
+ggsave(filename = paste0('cluster_scRef_', ref.dataset, '_', dataset, '.png'),
        path = path.res, plot = plot.umap.scRef,
        units = 'cm', height = 10, width = 8.5)
 
 # figure3: scRef and annotate unassigned
-plot.umap.scRef.unassign <- 
-    DimPlot(seurat.unlabeled, reduction = "umap", 
+plot.umap.scRef.unassign <-
+    DimPlot(seurat.unlabeled, reduction = "umap",
             label = T, repel = T, label.size = 2.5,
-            group.by = 'new.tag') + 
-    scale_color_manual(values = c('#24B700', '#E18A00', '#00ACFC', '#24B700', '#8CAB00', '#00C1AB', 
+            group.by = 'new.tag') +
+    scale_color_manual(values = c('#FB9A99', '#E18A00', '#00ACFC', '#1F78B4', '#8CAB00', '#00C1AB',
                                   '#BE9C00', '#800080', '#A52A2A', 'gray'),
-                       breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron', 
-                                  'Oligodendrocyte', 'Oligodendrocyte Precursor Cell', 
-                                  'Hypothalamic ependymal cell', 'Oligodendrocyte precursor cell',
-                                  'Astroglial cell', 'Unassigned')) + 
+                       breaks = c('Astrocyte', 'Endothelial Cell', 'Microglia', 'Neuron',
+                                  'Oligodendrocyte', 'Oligodendrocyte Precursor Cell',
+                                  'Hypothalamic ependymal cell', 'Atrial cardiomyocyte_Acta2 high',
+                                  'Stromal cell(Fetal_Brain)', 'Unassigned')) +
     # xlim(-18, 15) +
-    theme_bw() + 
+    theme_bw() +
     theme(axis.text = element_blank(),
           axis.ticks = element_blank(),
           panel.grid = element_blank(),
           axis.title = element_text(size = 8, face = 'bold'),
           legend.text = element_text(size = 6),
-          legend.position = 'bottom') + 
+          legend.position = 'bottom') +
     guides(color = guide_legend(ncol = 2,  byrow = TRUE, reverse = F,
                                 override.aes = list(size=3),
                                 keywidth = 0.1, keyheight = 0.1, default.unit = 'cm'))
-ggsave(filename = paste0('cluster_scRef_unassign_', ref.dataset, '_', dataset, '.png'), 
+ggsave(filename = paste0('cluster_scRef_unassign_', ref.dataset, '_', dataset, '.png'),
        path = path.res, plot = plot.umap.scRef.unassign,
        units = 'cm', height = 11, width = 8.5)
 
-# ggarrange(plot.umap, plot.umap.scRef, plot.umap.scRef.unassign, 
-#           ncol=2, nrow=2, common.legend = TRUE, legend="bottom") 
+# ggarrange(plot.umap, plot.umap.scRef, plot.umap.scRef.unassign,
+#           ncol=2, nrow=2, common.legend = TRUE, legend="bottom")
